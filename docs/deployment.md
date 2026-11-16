@@ -271,7 +271,9 @@ ssh fly-tencent 'docker logs --tail 100 i-remember'
 ```
 
 The original `Docker` workflow remains the repository's optional DockerHub
-verification/publishing pipeline. Its DockerHub publish job requires
-`DOCKERHUB_TOKEN`; this Tencent deployment does not depend on that workflow.
+verification/publishing pipeline. Its DockerHub publish job runs only when the repository variable
+`ENABLE_DOCKERHUB_PUBLISH=true` is set, and requires `DOCKERHUB_TOKEN`. Source
+verification still runs normally; Tencent deployment does not depend on the
+optional DockerHub publisher.
 Backups remain under `/opt/i-remember/backups` and need disk-space monitoring and
 an operator-selected retention/off-host backup policy.
