@@ -3,14 +3,14 @@
 set -euo pipefail
 umask 077
 base=/opt/i-remember
-read -r operation revision image checksum extra <<< "${SSH_ORIGINAL_COMMAND:-}"
-if [[ "$operation" != deploy || ! "$revision" =~ ^[a-f0-9]{40}$ || ! "$image" =~ ^sha256:[a-f0-9]{64}$ || ! "$checksum" =~ ^[a-f0-9]{64}$ || -n "$extra" ]]; then
-  echo 'Expected: deploy <40-character commit> <sha256:image-id> <archive-sha256>' >&2
+read -r operation revision digest extra <<< "${SSH_ORIGINAL_COMMAND:-}"
+if [[ "$operation" != deploy || ! "$revision" =~ ^[a-f0-9]{40}$ || ! "$digest" =~ ^sha256:[a-f0-9]{64}$ || -n "$extra" ]]; then
+  echo 'Expected: deploy <40-character commit> <sha256:registry-digest>' >&2
   exit 64
 fi
 exec 9>"$base/deploy.lock"
 flock -w 900 9 || { echo 'Another deployment is still running' >&2; exit 75; }
-incoming=$(mktemp "$base/.incoming.XXXXXX.tar.gz")
+registry_auth=$(mktemp -d "$base/.registry-auth.XXXXXX")
 old_container=""
 old_image=""
 committed=0
@@ -18,7 +18,7 @@ replaced=0
 cleanup() {
   result=$?
   trap - EXIT INT TERM
-  rm -f -- "$incoming"
+  rm -rf -- "$registry_auth"
   if [[ "$replaced" == 1 && "$committed" != 1 ]]; then
     echo 'Candidate failed; restoring the previous application container' >&2
     docker rm -f i-remember >/dev/null 2>&1 || true
@@ -32,11 +32,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-# Limit input to 2 GiB + 1 byte; failed checks never stop the current service.
-dd iflag=fullblock bs=1M count=2049 of="$incoming" status=none
-[[ $(stat -c %s "$incoming") -le 2147483648 ]] || { echo 'Archive exceeds 2 GiB' >&2; exit 65; }
-printf '%s  %s\n' "$checksum" "$incoming" | sha256sum -c -
-docker load -i "$incoming"
+# The job-scoped GitHub token is read only from stdin into a temporary Docker
+# config. It is never placed in argv, logs, the app environment or persisted.
+image_ref="ghcr.io/zhangsiqiang07/i-remember.fr@$digest"
+docker --config "$registry_auth" login ghcr.io --username zhangsiqiang07 --password-stdin
+timeout 1200 docker --config "$registry_auth" pull "$image_ref"
+image=$(docker image inspect --format '{{.Id}}' "$image_ref")
+rm -rf -- "$registry_auth"
 [[ $(docker image inspect --format '{{.Architecture}}' "$image") == amd64 ]]
 [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image") == "$revision" ]]
 [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.source"}}' "$image") == https://github.com/zhangsiqiang07/i-remember.fr ]]
