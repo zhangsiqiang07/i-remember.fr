@@ -224,3 +224,54 @@ configurable from 256 KiB through 64 MiB) for content writes. Other JSON endpoin
 retain the smaller standard budget. Requests above the transport budget receive
 HTTP 413 without saving truncated text. Allow the same request size in any outer
 reverse proxy; URL-encoded public submissions include encoding overhead.
+
+## Tencent host with existing PostgreSQL
+
+The `Deploy Tencent` workflow automatically builds `main` pushes on GitHub's
+AMD64 runner and uploads the compressed application image to
+`remember.aflyblue.cn` over SSH. It does not build on the 2 GB server and does
+not require DockerHub credentials. Manual dispatch is also limited to `main`.
+A superseded queued commit is skipped before transfer.
+
+This deployment deliberately bypasses the image's embedded PostgreSQL entrypoint.
+The root-owned files under `docker/tencent/` are installed at `/opt/i-remember`;
+`external-entrypoint.sh` uses the existing PostgreSQL 18 instance on loopback.
+`run.sh` retains the current persistent data, loopback listeners, memory limits,
+restart policy, authentication secret, and Docker log rotation. Repository
+changes to these host scripts require separately updating their installed copies;
+ordinary application code and Dockerfile changes deploy automatically.
+
+The only Actions secret is `TENCENT_DEPLOY_SSH_KEY`, an Ed25519 private key
+created exclusively for this repository. Its server-side authorized key has a
+forced command, `restrict`, and no PTY, forwarding, agent forwarding, or arbitrary
+shell access. It accepts only a commit SHA, image ID, archive checksum, and the
+image stream. The workflow pins the server's existing Ed25519 host key. Database
+credentials, the authentication secret, and administrator passwords stay on the
+server and are never sent to Actions or committed.
+
+The host deployment script:
+
+1. Serializes deployments, bounds the image archive size, verifies its SHA-256,
+   and checks AMD64 architecture plus source/revision image labels.
+2. Calls the existing `/opt/i-remember/backup.sh` before running migrations.
+3. Retains the old stopped container, starts the new image with the existing
+   external-database settings, and waits for application/Docker health and HTTPS.
+4. Restores the prior application container if startup or verification fails.
+   It does **not** reverse database migrations. New schema migrations must remain
+   backward compatible for application rollback to work safely.
+5. Records `/opt/i-remember/deployed-revision`, keeps one rollback container, and
+   removes only obsolete rollback containers/images belonging to this deployment.
+
+Check releases using:
+
+```sh
+ssh fly-tencent 'cat /opt/i-remember/deployed-revision'
+ssh fly-tencent 'docker inspect --format "{{.State.Health.Status}}" i-remember'
+ssh fly-tencent 'docker logs --tail 100 i-remember'
+```
+
+The original `Docker` workflow remains the repository's optional DockerHub
+verification/publishing pipeline. Its DockerHub publish job requires
+`DOCKERHUB_TOKEN`; this Tencent deployment does not depend on that workflow.
+Backups remain under `/opt/i-remember/backups` and need disk-space monitoring and
+an operator-selected retention/off-host backup policy.

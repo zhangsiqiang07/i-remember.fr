@@ -1,0 +1,112 @@
+name: Deploy Tencent
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-tencent-production
+  cancel-in-progress: false
+
+env:
+  # Kept separate from the repository's optional DockerHub publisher.
+  DOCKERHUB_IMAGE: i-remember-actions
+  DEPLOY_HOST: 43.138.80.38
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Validate deployment scripts
+        run: |
+          bash -n docker/tencent/deploy-from-actions.sh
+          bash -n docker/tencent/run.sh
+          sh -n docker/tencent/external-entrypoint.sh
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Build immutable Linux AMD64 application image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.DOCKERHUB_IMAGE }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/zhangsiqiang07/i-remember.fr
+          cache-from: type=gha,scope=tencent-amd64
+          cache-to: type=gha,mode=max,scope=tencent-amd64
+
+      - name: Check the built image
+        env:
+          TAG: sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image="$DOCKERHUB_IMAGE:$TAG"
+          test "$(docker image inspect --format '{{.Architecture}}' "$image")" = amd64
+          docker run --rm --entrypoint node "$image" --check server.mjs
+          docker run --rm --entrypoint node "$image" --check apps/api/dist/server.js
+          # Docker builds already run TypeScript and Vite compilation.
+          # Host PostgreSQL readiness/migrations and HTTPS are checked during deployment.
+
+      - name: Package image
+        env:
+          TAG: sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker save "$DOCKERHUB_IMAGE:$TAG" | gzip -1 > "$RUNNER_TEMP/i-remember.tar.gz"
+          echo "IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$DOCKERHUB_IMAGE:$TAG")" >> "$GITHUB_ENV"
+          echo "ARCHIVE_SHA=$(sha256sum "$RUNNER_TEMP/i-remember.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Deploy through the restricted SSH key
+        id: deploy
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.TENCENT_DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DEPLOY_SSH_KEY" ]]; then
+            echo 'Missing repository secret TENCENT_DEPLOY_SSH_KEY' >&2
+            exit 1
+          fi
+          # Do not deploy a queued commit after main has moved forward.
+          head=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [[ "$head" != "$GITHUB_SHA" ]]; then
+            echo "Skipping superseded commit $GITHUB_SHA"
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          install -d -m 700 "$RUNNER_TEMP/remember-ssh"
+          key="$RUNNER_TEMP/remember-ssh/key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key"
+          chmod 600 "$key"
+          # Pin the host key read from the server over the existing trusted SSH connection.
+          printf '%s\n' '43.138.80.38 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGru5PSdwDuNoRfFf7a9/cIaDkPfGaEyy4xiEEWDeiBN' > "$RUNNER_TEMP/remember-ssh/known_hosts"
+          ssh -T -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            -o "UserKnownHostsFile=$RUNNER_TEMP/remember-ssh/known_hosts" \
+            "root@$DEPLOY_HOST" "deploy $GITHUB_SHA $IMAGE_ID $ARCHIVE_SHA" \
+            < "$RUNNER_TEMP/i-remember.tar.gz"
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify public HTTPS
+        if: steps.deploy.outputs.deployed == 'true'
+        run: |
+          curl --fail --silent --show-error --retry 3 https://remember.aflyblue.cn/readyz
+          curl --fail --silent --show-error https://remember.aflyblue.cn/version
+          curl --fail --silent --show-error -o /dev/null https://remember.aflyblue.cn/admin
+          printf '### Deployment\n\n- Commit: `%s`\n- Site: https://remember.aflyblue.cn\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
