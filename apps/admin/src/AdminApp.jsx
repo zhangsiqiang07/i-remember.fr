@@ -2918,6 +2918,7 @@ function SettingsView({
           <TabsTrigger value="site">Site</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="storage">Storage</TabsTrigger>
           <TabsTrigger value="backup">Backup</TabsTrigger>
         </TabsList>
         <TabsContent value={settingsTab}>
@@ -3258,6 +3259,7 @@ function SettingsView({
               </Card>
             </div>
           ) : null}
+          {settingsTab === "storage" ? <StorageSettingsView reportDirty={reportDirty} /> : null}
           {settingsTab === "backup" ? <BackupsView exportBackup={exportBackup} /> : null}
         </TabsContent>
       </Tabs>
@@ -3306,4 +3308,72 @@ function BackupsView({ exportBackup }) {
       </Card>
     </div>
   );
+}
+
+
+function StorageSettingsView({ reportDirty }) {
+  const [draft, setDraft] = useState({ provider: "local" });
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState("loading");
+  const [feedback, setFeedback] = useState(null);
+  const requestSequence = useRef(0);
+  useEffect(() => {
+    let active = true;
+    v1Api("/api/v1/storage").then(value => { if (active) { setDraft(value); setLoaded(true); } })
+      .catch(error => { if (active) setFeedback({ error: true, message: error.message }); })
+      .finally(() => { if (active) setBusy(""); });
+    return () => { active = false; requestSequence.current++; };
+  }, []);
+  const change = (key, value) => {
+    reportDirty(true); setFeedback(null); setDraft(current => ({ ...current, [key]: value }));
+  };
+  async function providerChanged(provider) {
+    const sequence = ++requestSequence.current;
+    setBusy("loading"); setFeedback(null); reportDirty(true);
+    try {
+      const value = await v1Api(`/api/v1/storage?provider=${provider}`);
+      if (sequence === requestSequence.current) setDraft(value);
+    } catch (error) { if (sequence === requestSequence.current) setFeedback({ error: true, message: error.message }); }
+    finally { if (sequence === requestSequence.current) setBusy(""); }
+  }
+  async function submit(testOnly) {
+    if (busy || !loaded) return;
+    const sequence = ++requestSequence.current;
+    setBusy(testOnly ? "testing" : "saving"); setFeedback(null);
+    try {
+      const result = await v1Api(testOnly ? "/api/v1/storage/test" : "/api/v1/storage", { method: testOnly ? "POST" : "PUT", body: JSON.stringify(draft) });
+      if (sequence !== requestSequence.current) return;
+      if (!testOnly) { setDraft(result); reportDirty(false); }
+      setFeedback({ error: false, message: testOnly ? result.message : "Storage saved. New uploads will use this provider." });
+    } catch (error) { if (sequence === requestSequence.current) setFeedback({ error: true, message: error.message }); }
+    finally { if (sequence === requestSequence.current) setBusy(""); }
+  }
+  return <Card className="admin-settings-card">
+    <CardHeader><CardTitle>Media storage</CardTitle><CardDescription>Choose where new photos, videos, audio and Live Photos are stored.</CardDescription></CardHeader>
+    <CardContent>
+      <form id="settings-storage-form" className="grid gap-5" onSubmit={event => { event.preventDefault(); submit(false); }}>
+        <fieldset disabled={Boolean(busy) || !loaded} className="grid min-w-0 gap-5">
+          <Field><FieldLabel>Storage provider</FieldLabel><AdminSelect ariaLabel="Storage provider" value={draft.provider} onValueChange={providerChanged} options={[{value:"local",label:"Application server (local)"},{value:"oss",label:"Alibaba Cloud OSS"},{value:"r2",label:"Cloudflare R2"}]} /></Field>
+          {draft.provider !== "local" ? <>
+            <FieldGroup>
+              {draft.provider === "oss" ? <TextField label="Region" placeholder="cn-hangzhou" value={draft.region} onChange={value => change("region", value)} required description="Use the bucket's OSS region ID." /> : <TextField label="Cloudflare Account ID" placeholder="32-character account ID" value={draft.accountId} onChange={value => change("accountId", value)} required />}
+              <TextField label="Bucket" value={draft.bucket} onChange={value => change("bucket", value)} required autoComplete="off" />
+              <TextField label="Access Key ID" type="password" autoComplete="new-password" value={draft.accessKeyId} onChange={value => change("accessKeyId", value)} placeholder={draft.hasAccessKeyId ? "Saved — leave blank to keep" : "Access Key ID"} required={!draft.hasAccessKeyId} />
+              <TextField label={draft.provider === "oss" ? "AccessKey Secret" : "Secret Access Key"} type="password" autoComplete="new-password" value={draft.accessKeySecret} onChange={value => change("accessKeySecret", value)} placeholder={draft.hasAccessKeySecret ? "Saved — leave blank to keep" : "Secret Access Key"} required={!draft.hasAccessKeySecret} description="Credentials are encrypted on the server and are never returned to this page." />
+              <TextField label="Object prefix" placeholder="memories" value={draft.prefix} onChange={value => change("prefix", value)} description="Optional folder prefix inside the bucket." />
+              <TextField label="Public media URL (optional)" type="url" placeholder="https://media.example.com" value={draft.publicBaseUrl} onChange={value => change("publicBaseUrl", value)} description="Leave blank to use a private bucket through this site. A public domain must allow GET/HEAD CORS for your site." />
+            </FieldGroup>
+            <p className="text-sm text-muted-foreground">Use a bucket-scoped key with object read, write and delete permissions. Connection tests create and remove a small temporary object.</p>
+          </> : <p className="text-sm text-muted-foreground">New media stays in the application's persistent media directory.</p>}
+          <p className="text-sm text-muted-foreground">Existing files keep their original storage location. Changing providers does not migrate or delete them. Media is processed on the server before cloud upload.</p>
+          <div className="admin-settings-actions">
+            <Button type="button" variant="outline" onClick={() => submit(true)}>{busy === "testing" ? "Testing…" : "Test connection"}</Button>
+            <Button type="submit">{busy === "saving" ? "Saving…" : "Save storage"}</Button>
+          </div>
+        </fieldset>
+        {busy === "loading" ? <p role="status" className="text-sm text-muted-foreground">Loading storage settings…</p> : null}
+        {feedback ? <p role={feedback.error ? "alert" : "status"} className={feedback.error ? "text-sm text-red-400" : "text-sm text-muted-foreground"}>{feedback.message}</p> : null}
+      </form>
+    </CardContent>
+  </Card>;
 }

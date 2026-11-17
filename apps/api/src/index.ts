@@ -1,3 +1,4 @@
+import { registerObjectStorageRoutes } from "./object-storage.js";
 import { validateSession } from "./auth.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
@@ -51,7 +52,7 @@ import {
   SettingService,
   UserService,
 } from "./services.js";
-import type { StorageAdapter } from "@i-remember/storage";
+import { createMediaStorage, type StorageAdapter } from "@i-remember/storage";
 
 function logApiRequest(req: IncomingMessage, res: ServerResponse, startedAt: number) {
   const url = new URL(req.url || "/", "http://i-remember.local");
@@ -80,6 +81,7 @@ export type ApiDependencies = {
   settings?: SettingRepository;
   readiness?: ReadinessRepository;
   storage?: StorageAdapter;
+  objectStorage?: ReturnType<typeof createMediaStorage>;
 };
 
 export function createApiV1Router(dependencies: ApiDependencies = {}) {
@@ -122,6 +124,7 @@ export function createApiV1Router(dependencies: ApiDependencies = {}) {
   const readiness = new ReadinessController(readinessService);
   const auth = new AuthController(authService);
   const router = new Router(req => validateSession(req, userRepository));
+  registerObjectStorageRoutes(router, dependencies.objectStorage);
 
   router.add("GET", "/api/v1/memories", (context) => memories.list(context));
   router.add("GET", "/api/v1/public/random", (context) => memories.random(context));

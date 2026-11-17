@@ -112,7 +112,8 @@ trap 'exit 143' TERM
 
 expected_entries="$(printf '%s\n' SHA256SUMS assets.tar.gz auth-secret database.dump manifest.json | sort)"
 actual_entries="$(tar -tzf "$bundle_path" | sed 's#^\./##' | sort)"
-if [ "$actual_entries" != "$expected_entries" ]; then
+extended_entries="$(printf '%s\n' SHA256SUMS assets.tar.gz auth-secret database.dump manifest.json storage-state.tar.gz | sort)"
+if [ "$actual_entries" != "$expected_entries" ] && [ "$actual_entries" != "$extended_entries" ]; then
   printf 'Backup bundle contains an unexpected file set.\n' >&2
   exit 65
 fi
@@ -129,7 +130,7 @@ node --input-type=module - "$stage_dir/manifest.json" <<'NODE'
 import { readFileSync } from "node:fs";
 
 const manifest = JSON.parse(readFileSync(process.argv[2], "utf8"));
-if (manifest.format !== "i-remember-backup" || manifest.formatVersion !== 2) {
+if (manifest.format !== "i-remember-backup" || ![2, 3].includes(manifest.formatVersion)) {
   throw new Error("Unsupported backup manifest");
 }
 if (manifest.database?.engine !== "postgresql") {
@@ -154,6 +155,14 @@ unsafe_asset_type="$(
 if [ -n "$unsafe_asset_type" ]; then
   printf 'Asset archive contains a non-file entry type: %s\n' "$unsafe_asset_type" >&2
   exit 65
+fi
+
+if [ -f "$stage_dir/storage-state.tar.gz" ]; then
+  if tar -tzf "$stage_dir/storage-state.tar.gz" | sed 's#^\./##' | grep -Ev '^$|^object-storage\.enc\.json$|^object-storage-index(/|$)' | grep -q .; then
+    printf 'Storage state archive contains unexpected paths.\n' >&2; exit 65
+  fi
+  if tar -tzf "$stage_dir/storage-state.tar.gz" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then exit 65; fi
+  if tar -tvzf "$stage_dir/storage-state.tar.gz" | awk 'substr($1,1,1)!="-" && substr($1,1,1)!="d" {print;exit}' | grep -q .; then exit 65; fi
 fi
 
 umask 077
@@ -191,6 +200,11 @@ printf 'Restoring PostgreSQL logical dump...\n' >&2
 
 printf 'Restoring assets and authentication secret...\n' >&2
 tar --no-same-owner --no-same-permissions -xzf "$stage_dir/assets.tar.gz" -C "$storage_path"
+if [ -f "$stage_dir/storage-state.tar.gz" ]; then
+  tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$stage_dir/storage-state.tar.gz" -C "$data_dir"
+  # GNU tar applies the restrictive umask even to an existing archive root.
+  chmod 750 "$data_dir"
+fi
 cp "$stage_dir/auth-secret" "$auth_secret_file"
 chmod 600 "$auth_secret_file"
 cp "$stage_dir/manifest.json" "$data_dir/restore-manifest.json"

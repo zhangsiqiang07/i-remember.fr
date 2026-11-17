@@ -1,8 +1,8 @@
 import { join } from "node:path";
-import { access, readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { mediaIdentity, mediaStorageKey } from "./media.js";
 import sharp from "sharp";
-import { createLocalStorage, type StorageAdapter } from "@i-remember/storage";
+import { createMediaStorage, type StorageAdapter } from "@i-remember/storage";
 import type {
   AgentAnswer,
   AgentQueryInput,
@@ -702,9 +702,8 @@ export class DashboardService {
 export class AssetService {
   constructor(
     private readonly assets: AssetRepository,
-    private readonly storage: StorageAdapter = createLocalStorage({
+    private readonly storage: StorageAdapter = createMediaStorage({
       rootDir: process.env.STORAGE_PATH || join(process.cwd(), ".revival-storage"),
-      publicBaseUrl: process.env.STORAGE_PUBLIC_BASE_URL || "/uploads",
     }),
   ) {}
 
@@ -723,9 +722,8 @@ export class AssetService {
   async register(principal: Principal, input: AttachmentInput) {
     requireRole(principal, ["ADMIN"]);
     const key = mediaStorageKey(mediaIdentity(input.url));
-    if (!key) throw new ApiError(400, "Only completed local uploads can be added to the library.", "invalid_asset_url");
-    await access(join(process.env.STORAGE_PATH || join(process.cwd(), ".revival-storage"), key))
-      .catch(() => { throw new ApiError(404, "Upload not found", "not_found"); });
+    if (!key) throw new ApiError(400, "Only completed managed uploads can be added to the library.", "invalid_asset_url");
+    if (!await createMediaStorage().exists(key)) throw new ApiError(404, "Upload not found", "not_found");
     return this.assets.create({ ...input, type: input.type || "application/octet-stream" });
   }
 
@@ -818,7 +816,7 @@ export class AssetService {
     requireRole(principal, ["ADMIN"]);
     await this.assets.deleteUnused(id, async asset => {
       const key = mediaStorageKey(asset.identity || mediaIdentity(asset.url));
-      if (!key) throw new ApiError(400, "This file is not managed by local storage.", "unmanaged_asset");
+      if (!key) throw new ApiError(400, "This file is not managed by this site.", "unmanaged_asset");
       await this.storage.delete(key);
     });
     return { id, deleted: true };

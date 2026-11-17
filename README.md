@@ -55,6 +55,7 @@ oversized requests fail explicitly instead of silently cutting off the text.
   attachment from a story keeps it in the library. **Find stored files** inventories
   completed local uploads that predate the library, without deleting anything.
 - **Own the data.** PostgreSQL/Prisma, local upload storage, two-factor authentication,
+- **Choose media storage.** Configure local storage, Alibaba Cloud OSS or Cloudflare R2 in **Settings → Storage**, test bucket permissions, and save encrypted credentials. Existing media stays readable when providers change; private buckets work without a public domain. See [media storage](docs/deployment.md#configurable-media-storage).
   full backup/restore tooling, and optional self-hosted Umami analytics.
 - **Make content discoverable.** Server-rendered metadata, canonical URLs, structured
   data, `robots.txt`, and a homepage-only sitemap. Memories and uploads are excluded from search indexing.

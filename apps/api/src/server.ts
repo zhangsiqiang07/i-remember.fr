@@ -1,3 +1,4 @@
+import { createMediaStorage } from "@i-remember/storage";
 import { createServer } from "node:http";
 import { createApiV1Middleware } from "./index.js";
 import { serveLocalAsset } from "./static-assets.js";
@@ -15,6 +16,7 @@ function boundedEnvironmentInteger(
 const host = process.env.API_HOST || process.env.HOST || "127.0.0.1";
 const port = boundedEnvironmentInteger(process.env.API_PORT ? "API_PORT" : "PORT", 7892, 1, 65_535);
 const api = createApiV1Middleware();
+const mediaStorage = createMediaStorage();
 
 const server = createServer(
   {
@@ -25,13 +27,15 @@ const server = createServer(
       64 * 1024,
     ),
   },
-  (req, res) => {
+  async (req, res) => {
     if (req.method === "GET" && req.url === "/healthz") {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.end(JSON.stringify({ ok: true, service: "api" }));
       return;
     }
 
+    try { if (await mediaStorage.serve(req, res)) return; }
+    catch { if (!res.headersSent) { res.statusCode = 502; res.end("Media storage is unavailable"); } else res.destroy(); return; }
     if (serveLocalAsset(req, res)) return;
 
     api(req, res, () => {

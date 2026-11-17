@@ -42,3 +42,5 @@ try {
 } finally {
   await rm(rootDir, { recursive: true, force: true });
 }
+
+await import("./object-storage.check.js");

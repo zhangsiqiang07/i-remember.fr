@@ -1,3 +1,4 @@
+import { createMediaStorage } from "../../packages/storage/src/object-storage.js";
 import { uploadAudio } from "./audio.js";
 import { audioLimits } from "../../packages/config/src/media-limits.js";
 import { createVideoUploads, videoChunkBytes } from "./video-uploads.js";
@@ -924,6 +925,7 @@ function normalizedSiteSettings(value, fallback) {
 
 class RevivalBackend {
   constructor(options = {}) {
+    this.mediaStorage = options.mediaStorage || createMediaStorage();
     this.production = options.production === true;
     this.apiBaseUrl = String(options.apiBaseUrl || process.env.API_BASE_URL || "http://127.0.0.1:7892").replace(/\/+$/g, "");
     this.cachedSiteSettings = environmentSiteSettings();
@@ -1146,6 +1148,7 @@ class RevivalBackend {
     writeFileSync(resizedPath, resized, { mode: 0o660 });
     writeFileSync(thumbPath, thumb, { mode: 0o660 });
 
+    await this.mediaStorage.flushDirectory(`posts/${fileId}`);
     return fileId;
   }
 
@@ -1171,6 +1174,7 @@ class RevivalBackend {
       const data = await (animated ? pipeline.gif() : pipeline.jpeg({ quality: 90 })).toBuffer();
       writeFileSync(path, data, { mode: 0o660 });
     }
+    await this.mediaStorage.flushDirectory(`posts/${photo.fileId}`);
     const videoPath = join(folder, "video.json");
     const livePath = join(folder, "live-photo.json");
     if (existsSync(livePath)) return { url: `/uploads/posts/${photo.fileId}/${filename}`, type: "image/jpeg",
@@ -1185,6 +1189,10 @@ class RevivalBackend {
   }
 
   async imageForPath(pathname) {
+    if (/^\/uploads\/(?:posts|tmp)\//.test(pathname)) {
+      const stored = await this.mediaStorage.read(pathname.replace(/^\/uploads\/(?:posts|tmp)\//, "posts/"));
+      if (stored) return stored;
+    }
     const squareMatch = pathname.match(/^\/uploads\/posts\/(revival-[a-z0-9-]+)\/square\.jpg$/i);
     if (squareMatch) {
       const attachment = await this.cropPhoto({ fileId: squareMatch[1], crop: { x: 0.5, y: 0.5, zoom: 1 } }, 0);
@@ -1607,17 +1615,20 @@ export function createRevivalMiddleware(options = {}) {
   const backend = new RevivalBackend(options);
   backend.livePhotoUploads = createVideoUploads(process.env.STORAGE_PATH || join(runtimeDataDir(), "uploads"), async (result) => {
     const attachment = await backend.cropPhoto({ fileId: result.fileId, crop: { x: .5, y: .5, zoom: 1 } }, 0);
+    await backend.mediaStorage.flushDirectory(`posts/${result.fileId}`);
     return { ...result, attachment };
-  }, { kind: "live-photo", processVideo: uploadLivePhoto, maxBytes: livePhotoMaxBytes, limitMessage: "Choose a Live Photo of 100 MB or less." });
+  }, { cleanup: result => backend.mediaStorage.delete(`posts/${result.fileId}`), kind: "live-photo", processVideo: uploadLivePhoto, maxBytes: livePhotoMaxBytes, limitMessage: "Choose a Live Photo of 100 MB or less." });
   backend.videoUploads = createVideoUploads(process.env.STORAGE_PATH || join(runtimeDataDir(), "uploads"), async (result) => {
     const attachment = await backend.cropPhoto({ fileId: result.fileId, crop: { x: .5, y: .5, zoom: 1 } }, 0);
+    await backend.mediaStorage.flushDirectory(`posts/${result.fileId}`);
     return { ...result, attachment };
-  });
+  }, { cleanup: result => backend.mediaStorage.delete(`posts/${result.fileId}`) });
 
   backend.audioUploads = createVideoUploads(process.env.STORAGE_PATH || join(runtimeDataDir(), "uploads"), async (result) => {
     const attachment = await backend.cropPhoto({ fileId: result.fileId }, 0);
+    await backend.mediaStorage.flushDirectory(`posts/${result.fileId}`);
     return { ...result, attachment };
-  }, { kind: "audio", processVideo: uploadAudio, maxBytes: audioLimits.maxAudioBytes, limitMessage: "Choose audio of 100 MB or less." });
+  }, { cleanup: result => backend.mediaStorage.delete(`posts/${result.fileId}`), kind: "audio", processVideo: uploadAudio, maxBytes: audioLimits.maxAudioBytes, limitMessage: "Choose audio of 100 MB or less." });
 
   return (req, res, next) => {
     handleRequest(backend, req, res, next, options).catch((error) => {
@@ -1646,6 +1657,7 @@ async function handleRequest(backend, req, res, next, options = {}) {
   const url = new URL(req.url || "/", "http://i-remember.local");
   const pathname = decodeURIComponent(url.pathname);
   const startedAt = Date.now();
+  if (await backend.mediaStorage.serve(req, res)) return;
   if (req.method === "GET" && ["/index.html", "/fr.html", "/legal.html"].includes(pathname)) {
     res.statusCode = 308; res.setHeader("Location", `${pathname === "/fr.html" ? "/fr" : pathname === "/legal.html" ? "/legal" : "/"}${url.search}`); res.end(); return;
   }
@@ -1936,6 +1948,7 @@ async function handleRequest(backend, req, res, next, options = {}) {
     try { result = await uploadVideo(firstUploadedImage(files), process.env.STORAGE_PATH || join(runtimeDataDir(), "uploads")); }
     catch (error) { throw new HttpError(error.statusCode || 500, error.message, error.errorMsg || "unexpected"); }
     const attachment = await backend.cropPhoto({ fileId: result.fileId, crop: { x: .5, y: .5, zoom: 1 } }, 0);
+    await backend.mediaStorage.flushDirectory(`posts/${result.fileId}`);
     sendJson(req, res, { success: true, data: { ...result, attachment } });
     return;
   }

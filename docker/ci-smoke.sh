@@ -162,6 +162,19 @@ docker exec "$original_name" \
   -d i_remember \
   -tAc 'select count(*) from "menu_items"' | grep -qx '0'
 
+# Encrypted cloud settings and indexes must survive restore without changing
+# the PostgreSQL parent's traversal permissions. No real bucket is contacted.
+docker exec -i "$original_name" node --input-type=module <<'NODE'
+import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { createMediaStorage } from "/app/packages/storage/src/index.js";
+process.env.AUTH_SECRET = readFileSync("/var/opt/i-remember.fr/auth-secret", "utf8").trim();
+const storage = createMediaStorage();
+await storage.save({provider:"oss",region:"cn-hangzhou",bucket:"ci-fixture",accessKeyId:"ci-disposable-id",accessKeySecret:"ci-disposable-secret"});
+await storage.save({provider:"local"});
+mkdirSync("/var/opt/i-remember.fr/object-storage-index/admin", {recursive:true});
+writeFileSync("/var/opt/i-remember.fr/object-storage-index/admin/ci-fixture.json", '{"version":1,"files":{}}', {mode:0o600});
+NODE
+
 backup_path="/var/opt/i-remember.fr/ci-backup.tar.gz"
 docker exec "$original_name" i-remember-backup "$backup_path"
 
@@ -196,5 +209,14 @@ curl -fsS -H "Authorization: Bearer $admin_token" \
 curl -fsS "$restored_url/api/v1/memories/$memory_id" >/dev/null
 curl -fsS "$restored_url/uploads/smoke/persistence.txt" | grep -qx 'smoke-persistence'
 docker exec "$restored_name" /usr/local/bin/i-remember-healthcheck
+
+docker exec -i "$restored_name" node --input-type=module <<'NODE'
+import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
+import { createMediaStorage } from "/app/packages/storage/src/index.js";
+process.env.AUTH_SECRET = readFileSync("/var/opt/i-remember.fr/auth-secret", "utf8").trim();
+assert.equal((await createMediaStorage().settings("oss")).hasAccessKeySecret, true);
+assert.ok(existsSync("/var/opt/i-remember.fr/object-storage-index/admin/ci-fixture.json"));
+NODE
 
 echo "Fresh-volume, readiness, restart, backup, and restore checks passed."

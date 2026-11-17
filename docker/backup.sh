@@ -125,14 +125,32 @@ printf 'Creating PostgreSQL logical dump...\n' >&2
 
 printf 'Archiving uploaded assets...\n' >&2
 tar -C "$storage_path" -czf "$stage_dir/assets.tar.gz" .
+storage_archive=""
+if [ -f "$data_dir/object-storage.enc.json" ] || [ -d "$data_dir/object-storage-index" ]; then
+  mkdir "$stage_dir/storage-state"
+  for entry in object-storage.enc.json object-storage-index; do
+    if [ -e "$data_dir/$entry" ]; then cp -R "$data_dir/$entry" "$stage_dir/storage-state/$entry"; fi
+  done
+  (
+    cd "$stage_dir/storage-state"
+    set --
+    for entry in object-storage.enc.json object-storage-index; do
+      if [ -e "$entry" ]; then set -- "$@" "$entry"; fi
+    done
+    tar -czf "$stage_dir/storage-state.tar.gz" "$@"
+  )
+  storage_archive="storage-state.tar.gz"
+fi
 cp "$auth_secret_file" "$stage_dir/auth-secret"
 chmod 600 "$stage_dir/auth-secret"
 
 (
   cd "$stage_dir"
   sha256sum database.dump assets.tar.gz auth-secret > SHA256SUMS
+  if [ -n "$storage_archive" ]; then sha256sum "$storage_archive" >> SHA256SUMS; fi
 )
 
+BACKUP_STORAGE_STATE="$storage_archive" \
 BACKUP_CREATED_AT="$created_at" \
 APP_NAME="$app_name" \
 APP_VERSION="$app_version" \
@@ -158,7 +176,7 @@ process.stdout.write(
   `${JSON.stringify(
     {
       format: "i-remember-backup",
-      formatVersion: 2,
+      formatVersion: process.env.BACKUP_STORAGE_STATE ? 3 : 2,
       createdAt: process.env.BACKUP_CREATED_AT,
       app: {
         name: process.env.APP_NAME,
@@ -185,7 +203,7 @@ tar -C "$stage_dir" \
   SHA256SUMS \
   database.dump \
   assets.tar.gz \
-  auth-secret
+  auth-secret ${storage_archive:+"$storage_archive"}
 chmod 600 "$partial_path"
 ln "$partial_path" "$output_path"
 

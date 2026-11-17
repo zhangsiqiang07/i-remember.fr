@@ -1,7 +1,8 @@
+import { createMediaStorage } from "../packages/storage/src/object-storage.js";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -817,6 +818,49 @@ try {
   } finally {
     adminOnlyApp.kill("SIGTERM");
     await rm(adminOnlyDataDir, { recursive: true, force: true });
+  }
+  const previousCloudEnvironment = { data: process.env.I_REMEMBER_DATA_DIR, root: process.env.STORAGE_PATH, secret: process.env.AUTH_SECRET };
+  const cloudData = join(dataDir, "cloud"), cloudRoot = join(cloudData, "uploads"), cloudBytes = new Map();
+  process.env.I_REMEMBER_DATA_DIR = cloudData; process.env.STORAGE_PATH = cloudRoot; process.env.AUTH_SECRET = "cloud-proxy-disposable-fixture";
+  const cloudStorage = createMediaStorage({ dataDir: cloudData, rootDir: cloudRoot, fetch: async (url, options) => {
+    const key = String(url);
+    if (options.method === "PUT") {
+      const chunks = []; for await (const chunk of options.body) chunks.push(Buffer.from(chunk));
+      cloudBytes.set(key, Buffer.concat(chunks)); return new Response(null, { status: 200 });
+    }
+    if (options.method === "DELETE") { cloudBytes.delete(key); return new Response(null, { status: 204 }); }
+    return new Response(cloudBytes.get(key) || null, { status: cloudBytes.has(key) ? 200 : 404 });
+  } });
+  let cloudServer;
+  try {
+    await cloudStorage.save({ provider: "r2", bucket: "proxy-fixture", accountId: "a".repeat(32), accessKeyId: "fixture-id", accessKeySecret: "fixture-secret" });
+    anonymousSubmissions = true;
+    const cloudMiddleware = createRevivalMiddleware({ apiBaseUrl: `http://127.0.0.1:${upstreamPort}`, mediaStorage: cloudStorage });
+    cloudServer = createServer((req, res) => cloudMiddleware(req, res, () => { res.statusCode = 404; res.end(); }));
+    await new Promise(resolve => cloudServer.listen(0, "127.0.0.1", resolve));
+    const cloudBase = `http://127.0.0.1:${cloudServer.address().port}`;
+    const picture = await sharp({ create: { width: 60, height: 80, channels: 3, background: "#778899" } }).png().toBuffer();
+    const form = new FormData(); form.set("local", new Blob([picture], { type: "image/png" }), "fixture.png");
+    const uploaded = await fetch(cloudBase + "/api/upload-image", { method: "POST", headers: { Origin: cloudBase }, body: form });
+    assert.equal(uploaded.status, 200);
+    const fileId = (await uploaded.json()).data.fileId;
+    assert.equal(cloudBytes.size, 4, "All processed photo variants are uploaded to cloud storage");
+    assert.deepEqual(await readdir(join(cloudRoot, "posts", fileId)), [], "Processed photo bytes must leave the application server");
+    const full = await fetch(`${cloudBase}/uploads/posts/${fileId}/full.jpg`);
+    assert.equal(full.status, 200); assert.equal((await sharp(Buffer.from(await full.arrayBuffer())).metadata()).height, 80);
+    const posted = await fetch(cloudBase + "/api/post", { method: "POST", headers: { Origin: cloudBase, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Cloud fixture", message: "Cloud crop fixture", photos: [{fileId,crop:{x:.5,y:.5,zoom:1}}] }) });
+    assert.equal(posted.status, 200);
+    const attachment = v1CreateBodies.at(-1).attachments[0];
+    assert.match(attachment.url, /crop-/);
+    const crop = await fetch(cloudBase + attachment.url); assert.equal(crop.status, 200);
+    assert.equal((await sharp(Buffer.from(await crop.arrayBuffer())).metadata()).width,600);
+    await cloudStorage.save({ provider: "local" });
+    assert.equal((await fetch(`${cloudBase}/uploads/posts/${fileId}/thumb.jpg`)).status,200,"Old cloud photos remain readable after switching to local storage");
+    await cloudStorage.delete(`posts/${fileId}`); assert.equal(cloudBytes.size,0);
+    console.log("Cloud public upload, local staging cleanup, remote crop, stable URLs and provider switching passed");
+  } finally {
+    if (cloudServer) await new Promise(resolve => cloudServer.close(resolve));
+    for (const [key, value] of [["I_REMEMBER_DATA_DIR",previousCloudEnvironment.data],["STORAGE_PATH",previousCloudEnvironment.root],["AUTH_SECRET",previousCloudEnvironment.secret]]) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
   console.log("server api proxy ok");
 } finally {

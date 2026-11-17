@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Admin-configurable local, Alibaba Cloud OSS and Cloudflare R2 media storage,
+  with encrypted credentials, upload/read/delete connection tests, private-bucket
+  delivery, stable media URLs and original-provider retention. Processed photo,
+  GIF, video, audio and Live Photo files can leave local storage after upload.
+- Backup bundles include encrypted cloud settings and media indexes when present;
+  restore accepts both existing v2 and new v3 bundles.
+
+
 ### Fixed
 
 - Enforce closed anonymous uploads while retaining authenticated owner uploads;

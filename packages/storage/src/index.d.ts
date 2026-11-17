@@ -30,3 +30,25 @@ export function createS3Storage(options: {
   bucket: string;
   publicBaseUrl?: string;
 }): StorageAdapter;
+
+export type ObjectStorageSettings = {
+  provider: "local" | "oss" | "r2";
+  bucket?: string;
+  region?: string;
+  accountId?: string;
+  accessKeyId?: string;
+  accessKeySecret?: string;
+  prefix?: string;
+  publicBaseUrl?: string;
+  hasAccessKeyId?: boolean;
+  hasAccessKeySecret?: boolean;
+};
+export function createMediaStorage(options?: { rootDir?: string; dataDir?: string; fetch?: typeof fetch }): StorageAdapter & {
+  settings(provider?: string): Promise<ObjectStorageSettings>;
+  save(input: ObjectStorageSettings): Promise<ObjectStorageSettings>;
+  test(input: ObjectStorageSettings): Promise<{ok: boolean; message: string}>;
+  flushDirectory(group: string): Promise<void>;
+  read(key: string): Promise<{data: Buffer; mimeType: string} | null>;
+  exists(key: string): Promise<boolean>;
+  serve(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse): Promise<boolean>;
+};

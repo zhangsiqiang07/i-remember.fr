@@ -62,3 +62,5 @@ export function createS3Storage({ client, bucket, publicBaseUrl = "" }) {
     },
   };
 }
+
+export { createMediaStorage } from "./object-storage.js";

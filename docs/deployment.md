@@ -280,3 +280,63 @@ verification still runs normally; Tencent deployment does not depend on the
 optional DockerHub publisher.
 Backups remain under `/opt/i-remember/backups` and need disk-space monitoring and
 an operator-selected retention/off-host backup policy.
+
+
+## Configurable media storage
+
+Open **Settings → Storage** as the owner and select **Application server (local)**,
+**Alibaba Cloud OSS**, or **Cloudflare R2**. Local storage remains the default.
+No database migration or new SDK dependency is needed.
+
+For OSS, enter the bucket's region (for example `cn-hangzhou`), bucket name,
+AccessKey ID and AccessKey Secret. The application uses the regional public
+endpoint and [OSS V4 signing](https://www.alibabacloud.com/help/en/oss/developer-reference/recommend-to-use-signature-version-4).
+For R2, enter the 32-character Cloudflare Account ID, bucket, S3 Access Key ID
+and Secret Access Key. It uses the default account S3 endpoint and region `auto`
+([R2 S3 API](https://developers.cloudflare.com/r2/api/s3/api/)). Jurisdiction-specific
+R2 endpoints are not currently supported. Give the key read, write and delete
+permission only for the intended bucket/prefix. The application does not create
+buckets or change their access policies.
+
+**Object prefix** is an optional folder inside the bucket. Leave **Public media
+URL** empty for a private bucket: the application signs cloud requests and streams
+media through existing site URLs, including Range and HEAD for playback. An
+optional HTTPS public/CDN base URL redirects media requests to that domain; enable
+GET/HEAD CORS for this site's origin at the provider. The connection test verifies
+signed bucket operations, not your public domain or its CORS configuration.
+For publicly served media, configure equivalent noindex/noimageindex response
+headers at your CDN. Server-proxied media retains the site's noindex headers.
+
+**Test connection** uploads, reads back and deletes a uniquely named small object
+under `<prefix>/connection-tests/`; it does not activate settings. **Save storage**
+repeats that check and activates only a working configuration. Blank credential
+inputs retain saved credentials for the selected provider. Credentials never come
+back in settings/API responses. All storage endpoints require an owner session,
+and writes also enforce same-origin and rate limits.
+
+Uploads still pass through the application's media processing/privacy filters.
+After image conversion, crop generation or audio/video/Live Photo processing,
+completed bytes are transferred to the selected bucket and removed locally only
+after cloud upload and the durable media index succeed. Temporary processing
+space is still required. Small JSON manifests stay local for crop/media metadata.
+Cloud transfer failures leave staged files available and do not report a successful
+upload. No automatic migration or deletion of existing local/cloud media occurs.
+Existing objects retain their original provider/profile even after switching to
+local storage or another bucket. Rotating credentials for the same bucket also
+updates its historical profiles. Preserve access to previously used buckets.
+
+The application stores encrypted configuration in
+`<I_REMEMBER_DATA_DIR>/object-storage.enc.json` and per-media indexes under
+`<I_REMEMBER_DATA_DIR>/object-storage-index/`. Files use mode 0600; encryption uses
+a separate AES-256-GCM key derived from the persisted `AUTH_SECRET`. Keep that
+secret unchanged. These files are outside public upload paths, shared by the API
+and web processes, and must be included in backups. Tencent's existing whole-data
+backup already includes them. The built-in backup adds `storage-state.tar.gz`
+when needed (bundle v3); the new restore supports v2 and v3. Older images cannot
+restore v3 bundles. Bucket objects themselves are not downloaded into the backup:
+use object versioning/retention or an off-site bucket backup as appropriate.
+
+An empty local configuration still produces the existing v2 backup format. The
+admin JSON content export is not a backup of bucket files, cloud credentials or
+media indexes. Do not remove cloud configuration/index files when rolling back
+an application image.

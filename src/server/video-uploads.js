@@ -135,6 +135,7 @@ export function createVideoUploads(storageRoot, finalize = async (result) => res
           );
           const finalized = session.cancelled ? null : await finalize(result);
           if (session.cancelled) {
+            if (options.cleanup) await options.cleanup(result);
             await rm(join(storageRoot, "posts", result.fileId), { recursive: true, force: true });
             return;
           }

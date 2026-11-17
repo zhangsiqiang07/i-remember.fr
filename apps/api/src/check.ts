@@ -1,3 +1,4 @@
+import { createMediaStorage } from "@i-remember/storage";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -470,6 +471,14 @@ if (!("token" in seedAdminSession)) {
 }
 const adminHeaders = { Authorization: `Bearer ${seedAdminSession.token}` };
 
+const cloudSettingsDirectory = await mkdtemp(join(tmpdir(), "api-cloud-settings-"));
+const probeObjects = new Map<string, string>();
+const objectStorage = createMediaStorage({ dataDir: cloudSettingsDirectory, rootDir: join(cloudSettingsDirectory, "assets"), fetch: (async (url: any, options: any) => {
+  const key = String(url);
+  if (options.method === "PUT") { probeObjects.set(key, String(options.body)); return new Response(null, {status:200}); }
+  if (options.method === "DELETE") { probeObjects.delete(key); return new Response(null, {status:204}); }
+  return new Response(probeObjects.get(key) || "", {status: probeObjects.has(key) ? 200 : 404});
+}) as typeof fetch });
 const middleware = createApiV1Middleware({
   memories: new MemoryRepo(),
   users: userRepository,
@@ -480,6 +489,7 @@ const middleware = createApiV1Middleware({
   settings: settingRepository,
   readiness: readinessRepository,
   storage,
+  objectStorage,
 });
 const server = createServer((req, res) => {
   middleware(req, res, () => {
@@ -500,6 +510,24 @@ async function json(path: string, options: RequestInit = {}) {
   const body = await response.json();
   return { response, body };
 }
+
+assert.equal((await json("/api/v1/storage")).response.status, 401);
+assert.equal((await json("/api/v1/storage/test", {method:"POST",body:"{}"})).response.status, 401);
+const cloudInput = {provider:"r2", accountId:"a".repeat(32),bucket:"test-bucket",accessKeyId:"test-access-id",accessKeySecret:"test-access-secret"};
+const badCloudSave = await json("/api/v1/storage", {method:"PUT",headers:adminHeaders,body:JSON.stringify({...cloudInput,accountId:"127.0.0.1"})});
+assert.equal(badCloudSave.response.status, 400);
+assert.equal(probeObjects.size,0);
+const cloudProbe = await json("/api/v1/storage/test", {method:"POST",headers:adminHeaders,body:JSON.stringify(cloudInput)});
+assert.equal(cloudProbe.response.status,200); assert.equal(probeObjects.size,0);
+assert.equal((await json("/api/v1/storage",{headers:adminHeaders})).body.data.provider,"local","Testing must not activate cloud storage");
+const savedCloud = await json("/api/v1/storage", {method:"PUT",headers:adminHeaders,body:JSON.stringify(cloudInput)});
+assert.equal(savedCloud.response.status,200); assert.equal(savedCloud.body.data.hasAccessKeySecret,true);
+assert.equal(savedCloud.body.data.accessKeySecret, "");
+assert.ok(!JSON.stringify(savedCloud.body).includes("test-access-secret"));
+const repeatedCloud = await json("/api/v1/storage", {method:"PUT",headers:adminHeaders,body:JSON.stringify({...savedCloud.body.data,prefix:"new-folder"})});
+assert.equal(repeatedCloud.response.status,200,"Blank secret inputs retain saved credentials");
+assert.ok(!JSON.stringify((await json("/api/v1/public/settings")).body).includes("test-access"));
+assert.equal((await json("/api/v1/storage", {method:"PUT",headers:adminHeaders,body:JSON.stringify({provider:"local"})})).response.status,200);
 
 for (const invalidId of ["12345", "abc", "a".repeat(33), "bad/id", "with space", "中文名字", ""]) {
   const invalidLink = await json("/api/v1/memories/pub_1", { method: "PATCH", headers: adminHeaders, body: JSON.stringify({ publicId: invalidId }) });
@@ -1499,4 +1527,5 @@ resetRequestSecurityState();
 await new Promise<void>((resolve, reject) => {
   server.close((error) => (error ? reject(error) : resolve()));
 });
+await rm(cloudSettingsDirectory, {recursive:true,force:true});
 console.log("api app ok");
