@@ -52,6 +52,7 @@ import type {
 import { ApiError } from "./errors.js";
 
 export type RuntimeSettings = {
+  adminName: string;
   siteName: string;
   siteTitle: string;
   siteDescription: string;
@@ -92,6 +93,7 @@ function initialRuntimeSettings(): RuntimeSettings {
   const umamiSrc = String(process.env.UMAMI_SRC || "");
   const umamiWebsiteId = String(process.env.UMAMI_WEBSITE_ID || "");
   return {
+    adminName: String(process.env.I_REMEMBER_ADMIN_NAME || ""),
     siteDescription: String(process.env.I_REMEMBER_SITE_DESCRIPTION ?? "A quiet place for the moments we might one day forget."),
     ownerName: String(process.env.I_REMEMBER_OWNER_NAME ?? "Owner"),
     ownerAlternateName: String(process.env.I_REMEMBER_OWNER_ALTERNATE_NAME ?? ""),
@@ -118,6 +120,7 @@ function normalizedRuntimeSettings(values: Record<string, unknown>): RuntimeSett
       ? (values.tracking as Record<string, unknown>)
       : {};
   return {
+    adminName: typeof values.adminName === "string" ? values.adminName.trim().slice(0, 120) : "",
     siteDescription: typeof values.siteDescription === "string" ? values.siteDescription.trim().slice(0, 320) : "",
     ownerName: typeof values.ownerName === "string" ? values.ownerName.trim().slice(0, 120) : "",
     ownerAlternateName: typeof values.ownerAlternateName === "string" ? values.ownerAlternateName.trim().slice(0, 120) : "",

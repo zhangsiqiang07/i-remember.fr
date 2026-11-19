@@ -344,3 +344,7 @@ an application image.
 ### Direct media URLs
 
 When OSS is selected, API responses and rendered content use the configured public media domain plus object prefix and key directly. If the domain is blank, the bucket’s public OSS endpoint is used. R2 uses its configured public/custom domain, or the private proxy when blank. Existing local files retain their website URLs. Public buckets/domains must permit anonymous image GET with CORS for the website (including WebGL/canvas); the application does not change bucket ACLs or CORS rules. Editor submissions resolve known cloud object URLs back to stable internal media identities, preserving usage tracking and deletion. Existing database records need no migration.
+
+### Admin identity
+
+Settings → Site → Admin name controls the desktop/mobile admin wordmark, sign-in/setup branding and admin browser title. Leave it blank to follow Owner name. Homepage title remains separately editable. Existing article authors are stored per article; changing Owner name changes new-entry defaults, not historical author records. Back up the database before an intentional bulk author rename.

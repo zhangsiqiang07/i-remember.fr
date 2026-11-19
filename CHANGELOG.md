@@ -326,3 +326,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow configured historical cloud media origins in image/media/connect CSP directives so direct OSS/R2 resources render without broad wildcard permissions.
 
 - Use configured ownerName in admin sign-in/setup, desktop/mobile owner identity, initials and new-memory author defaults; remove personal-name runtime fallbacks. Existing author records and explicitly configured homepage titles are preserved.
+
+- Add independent Admin name configuration for admin branding and browser titles, with Owner name fallback.

@@ -1,3 +1,8 @@
+export function adminIdentity(settings = {}) {
+  const name = String(settings.adminName || "").trim() || ownerIdentity(settings).name;
+  return { name, initial: [...name][0].toUpperCase() };
+}
+
 export function ownerIdentity(settings = {}) {
   const name = String(settings.ownerName || "").trim() || "Owner";
   const words = name.split(/\s+/u);
@@ -89,7 +94,7 @@ export function v1PagePayload(
   };
 }
 
-export function v1PageMemory(page = {}) {
+export function v1PageMemory(page = {}, settings = {}) {
   const publicId = String(
     page.linkedMemoryPublicId ||
       page.linked_memory_public_id ||
@@ -104,7 +109,7 @@ export function v1PageMemory(page = {}) {
     language: language(page.language, page.defaultLanguage || page.siteDefaultLanguage || "en"),
     source: "page",
     title: page.title,
-    author: "Songqi",
+    author: page.authorName || ownerIdentity(settings).name,
     excerpt: page.excerpt,
     bodyMarkdown: page.bodyMarkdown,
     isLongForm: true,
@@ -199,11 +204,12 @@ export async function deleteV1MenuItem(v1Api, item) {
 
 export function v1SettingsPayload(settings = {}) {
   return {
+    adminName: String(settings.adminName ?? "").trim(),
     siteDescription: String(settings.siteDescription ?? "").trim(),
     ownerName: String(settings.ownerName ?? "").trim(),
     ownerAlternateName: String(settings.ownerAlternateName ?? "").trim(),
     siteName: String(settings.siteName || "I remember,").trim() || "I remember,",
-    siteTitle: String(settings.siteTitle || "Songqi").trim() || "Songqi",
+    siteTitle: String(settings.siteTitle || settings.ownerName || settings.siteName || "I remember,").trim() || "I remember,",
     canonicalUrl: String(settings.canonicalUrl || "https://songqi.org").trim(),
     timezone: String(settings.timezone || "Asia/Shanghai").trim() || "Asia/Shanghai",
     defaultLanguage: language(settings.defaultLanguage),

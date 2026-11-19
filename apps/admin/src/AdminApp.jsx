@@ -64,6 +64,7 @@ import { mergeV1Assets, v1AssetUploadPayload } from "./v1-assets.js";
 import {
   deleteV1MenuItem,
   ownerIdentity,
+  adminIdentity,
   syncV1MenuItem,
   syncV1Page,
   syncV1Settings,
@@ -302,6 +303,7 @@ function v1MenuAdmin(item = {}) {
 
 function settingsFromV1(settings = {}, account = {}) {
   return {
+    adminName: settings.adminName ?? "",
     siteName: settings.siteName || "I remember,",
     siteTitle: settings.siteTitle || settings.ownerName || settings.siteName || "I remember,",
     siteDescription: settings.siteDescription ?? "",
@@ -1259,6 +1261,12 @@ export function AdminApp() {
     });
   }
 
+  useEffect(() => {
+    const title = `${adminIdentity(data?.settings || publicSettings).name} — Admin`;
+    document.title = title;
+    document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute("content", title);
+  }, [data?.settings?.adminName, data?.settings?.ownerName, publicSettings]);
+
   const currentRoute = routeMap.get(route) || routeMap.get("dashboard");
   const activeRoute = route === "memory-editor" ? "memory" : route === "page-editor" ? "pages" : route;
 
@@ -1421,6 +1429,7 @@ export function AdminApp() {
 
 function LoginScreen({ loading, onLogin, settings }) {
   const { name: ownerName } = ownerIdentity(settings);
+  const { name: adminName } = adminIdentity(settings);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
@@ -1444,7 +1453,7 @@ function LoginScreen({ loading, onLogin, settings }) {
   return (
     <main className="i-remember-admin admin-auth dark min-h-screen bg-background text-foreground">
       <section className="admin-auth-brand">
-        <strong>songqi.org</strong>
+        <strong>{adminName}</strong>
         <div>
           <h1>
             A place for the moments
@@ -1516,6 +1525,7 @@ function LoginScreen({ loading, onLogin, settings }) {
 
 function SetupScreen({ loading, onSetup, settings }) {
   const { name: ownerName } = ownerIdentity(settings);
+  const { name: adminName } = adminIdentity(settings);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -1538,7 +1548,7 @@ function SetupScreen({ loading, onSetup, settings }) {
   return (
     <main className="i-remember-admin admin-auth dark min-h-screen bg-background text-foreground">
       <section className="admin-auth-brand">
-        <strong>songqi.org</strong>
+        <strong>{adminName}</strong>
         <div>
           <h1>
             A place for the moments
@@ -1552,7 +1562,7 @@ function SetupScreen({ loading, onSetup, settings }) {
       <section className="admin-auth-panel">
         <Card className="admin-auth-card admin-auth-card-setup">
           <CardHeader>
-            <CardTitle>Set up songqi.org</CardTitle>
+            <CardTitle>Set up {adminName}</CardTitle>
             <CardDescription>
               Create the single owner account for this installation.
             </CardDescription>
@@ -1678,6 +1688,7 @@ function TopBarAction({
 
 function AdminSidebar({ route, navigate, collapsed, toggleCollapsed, openSearch, onLogout, settings }) {
   const { name: ownerName, initials } = ownerIdentity(settings);
+  const { name: adminName, initial: adminInitial } = adminIdentity(settings);
   return (
     <aside className="admin-sidebar">
       <div className="admin-sidebar-inner">
@@ -1685,9 +1696,9 @@ function AdminSidebar({ route, navigate, collapsed, toggleCollapsed, openSearch,
           className="admin-brand"
           onClick={() => navigate("dashboard")}
           type="button"
-          title="songqi.org"
+          title={adminName}
         >
-          <span className="admin-brand-name">{collapsed ? "S" : "songqi.org"}</span>
+          <span className="admin-brand-name">{collapsed ? adminInitial : adminName}</span>
           {!collapsed ? <span className="admin-brand-role">private admin</span> : null}
         </button>
         <button
@@ -1724,7 +1735,7 @@ function AdminSidebar({ route, navigate, collapsed, toggleCollapsed, openSearch,
         <div className="admin-sidebar-footer">
           {!collapsed ? (
             <a className="admin-site-link" href="/" target="_blank" rel="noreferrer">
-              View songqi.org <ExternalLink />
+              View site <ExternalLink />
             </a>
           ) : null}
           <button
@@ -1761,6 +1772,7 @@ function AdminSidebar({ route, navigate, collapsed, toggleCollapsed, openSearch,
 
 function MobileNavigationSheet({ open, route, navigate, openSearch, close, onLogout, settings }) {
   const { name: ownerName, initials } = ownerIdentity(settings);
+  const { name: adminName } = adminIdentity(settings);
   const sheetRef = useRef(null);
   const closeButtonRef = useRef(null);
   useDialogFocusTrap(open, sheetRef, closeButtonRef, close);
@@ -1787,7 +1799,7 @@ function MobileNavigationSheet({ open, route, navigate, openSearch, close, onLog
         </h2>
         <div className="admin-mobile-brand">
           <div>
-            <strong>songqi.org</strong>
+            <strong>{adminName}</strong>
             <span>private admin</span>
           </div>
           <button ref={closeButtonRef} type="button" onClick={close} aria-label="Close navigation">
@@ -1902,7 +1914,7 @@ function Spotlight({ open, data, close, navigate, createMemory, createPage, edit
     { group: "Navigation", label: "Open Settings", meta: "S", action: () => navigate("settings") },
     {
       group: "Navigation",
-      label: "View songqi.org",
+      label: "View site",
       meta: "↗",
       action: () => window.open("/", "_blank", "noopener"),
     },
@@ -2175,7 +2187,7 @@ function DashboardView({ data, navigate, createMemory, createPage, editMemory })
               </button>
               <a href="/" target="_blank" rel="noreferrer">
                 <span>Open public site</span>
-                <small>songqi.org ↗</small>
+                <small>{data.settings?.siteName || "View site"} ↗</small>
               </a>
             </CardContent>
           </Card>
@@ -2849,6 +2861,7 @@ function SettingsView({
   const settings = data.settings || {};
   const account = settings.account || {};
   const [siteDraft, setSiteDraft] = useState(() => ({
+    adminName: settings.adminName ?? "",
     siteName: settings.siteName || "I remember,",
     siteTitle: settings.siteTitle || settings.ownerName || settings.siteName || "I remember,",
     siteDescription: settings.siteDescription ?? "",
@@ -2879,7 +2892,8 @@ function SettingsView({
 
   useEffect(() => {
     setSiteDraft({
-      siteName: settings.siteName || "I remember,",
+      adminName: settings.adminName ?? "",
+    siteName: settings.siteName || "I remember,",
       siteTitle: settings.siteTitle || settings.ownerName || settings.siteName || "I remember,",
       siteDescription: settings.siteDescription ?? "",
       ownerName: settings.ownerName ?? "",
@@ -2898,6 +2912,7 @@ function SettingsView({
     });
     setAccountDraft((current) => ({ ...current, email: account.email || "" }));
   }, [
+    settings.adminName,
     settings.siteName,
     settings.siteTitle,
     settings.siteDescription,
@@ -2953,6 +2968,7 @@ function SettingsView({
                   }}
                 >
                   <FieldGroup>
+                    <TextField label="Admin name" description="Shown in the admin logo, sign-in screen and browser title. Leave blank to use Owner name." value={siteDraft.adminName} onChange={value => updateSite("adminName", value)} />
                     <TextField
                       label="Site name"
                       description="The preferred name above your URL in search results."
@@ -3258,7 +3274,7 @@ function SettingsView({
                         onClick={() =>
                           downloadText(
                             "i-remember-recovery-codes.txt",
-                            `songqi.org recovery codes\nGenerated: ${new Date().toISOString()}\n\n${recoveryCodes.join("\n")}\n`,
+                            `${adminIdentity(settings).name} recovery codes\nGenerated: ${new Date().toISOString()}\n\n${recoveryCodes.join("\n")}\n`,
                           )
                         }
                       >

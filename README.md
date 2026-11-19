@@ -257,6 +257,7 @@ In **Settings → Site**, save:
 | Homepage title   | Browser title and homepage search title                                 |
 | Canonical URL    | Your public HTTP(S) origin, e.g. `https://songqi.org`; no path or query |
 | Site description | Homepage search snippet and sharing description                         |
+| Admin name       | Admin branding and browser title; leave blank to follow Owner name     |
 | Owner name       | Public name, e.g. `Songqi Duan`                                         |
 | Alternate name   | Another spelling or language, e.g. `段松岐`; may be blank               |
 

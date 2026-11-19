@@ -640,9 +640,11 @@ for (const canonicalUrl of ["javascript:alert(1)", "https://example.org/path", "
   const invalidSeo = await json("/api/v1/settings", { method: "PUT", headers: adminHeaders, body: JSON.stringify({ canonicalUrl }) });
   assert.equal(invalidSeo.response.status, 400);
 }
+const oversizedAdminName = await json("/api/v1/settings", {method:"PUT",headers:adminHeaders,body:JSON.stringify({adminName:"x".repeat(121)})});
+assert.equal(oversizedAdminName.response.status,400);
 const oversizedSeo = await json("/api/v1/settings", { method: "PUT", headers: adminHeaders, body: JSON.stringify({ ownerName: "x".repeat(121) }) });
 assert.equal(oversizedSeo.response.status, 400);
-const customSeo = await json("/api/v1/settings", { method: "PUT", headers: adminHeaders, body: JSON.stringify({ memoryNavigation: true, memorySharing: true, siteName: "Alex’s archive", canonicalUrl: "https://example.org/", ownerName: "Alex Example", ownerAlternateName: "", siteDescription: "Another personal archive" }) });
+const customSeo = await json("/api/v1/settings", { method: "PUT", headers: adminHeaders, body: JSON.stringify({ memoryNavigation: true, memorySharing: true, adminName: "Alex Admin", siteName: "Alex’s archive", canonicalUrl: "https://example.org/", ownerName: "Alex Example", ownerAlternateName: "", siteDescription: "Another personal archive" }) });
 assert.equal(customSeo.response.status, 200);
 const savedSeo = (await json("/api/v1/public/settings")).body.data;
 assert.equal(savedSeo.memorySharing, true);
@@ -651,6 +653,7 @@ assert.equal(savedSeo.siteName, "Alex’s archive");
 assert.equal(savedSeo.siteTitle, publicSettings.body.data.siteTitle);
 assert.equal(savedSeo.canonicalUrl, "https://example.org");
 assert.equal(savedSeo.ownerName, "Alex Example");
+assert.equal(savedSeo.adminName, "Alex Admin");
 assert.equal(savedSeo.ownerAlternateName, "");
 assert.equal(savedSeo.siteDescription, "Another personal archive");
 await json("/api/v1/settings", { method: "PUT", headers: adminHeaders, body: JSON.stringify(publicSettings.body.data) });

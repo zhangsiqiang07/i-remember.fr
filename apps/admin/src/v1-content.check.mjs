@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   deleteV1MenuItem,
   ownerIdentity,
+  adminIdentity,
   syncV1MenuItem,
   syncV1Page,
   syncV1Settings,
@@ -153,3 +154,9 @@ assert.deepEqual(ownerIdentity({ownerName:"  Alice Chen  "}), {name:"Alice Chen"
 assert.deepEqual(ownerIdentity({ownerName:"陈小明"}), {name:"陈小明", initials:"陈小"});
 assert.deepEqual(ownerIdentity({ownerName:""}), {name:"Owner", initials:"OW"});
 assert.deepEqual(ownerIdentity({ownerName:"😀"}), {name:"😀", initials:"😀"});
+
+assert.deepEqual(adminIdentity({ownerName:"aflyblue"}), {name:"aflyblue",initial:"A"});
+assert.deepEqual(adminIdentity({ownerName:"aflyblue",adminName:"My Archive"}), {name:"My Archive",initial:"M"});
+assert.equal(v1SettingsPayload({adminName:" My Archive "}).adminName,"My Archive");
+
+assert.equal(v1PageMemory({linkedMemoryPublicId:"linked-page"}, {ownerName:"aflyblue"}).author,"aflyblue");
