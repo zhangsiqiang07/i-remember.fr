@@ -693,7 +693,7 @@ export function AdminApp() {
             .then(() => true)
             .catch(() => false)
         : false,
-      v1Api("/api/v1/public/settings").catch(() => ({})),
+      api("/api/v1/public/settings").catch(() => ({})),
     ])
       .then(([status, hasSession, settings]) => {
         if (active) {
