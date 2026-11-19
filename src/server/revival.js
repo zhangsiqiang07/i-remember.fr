@@ -332,6 +332,7 @@ function setSecurityHeaders(res, { html = false, tracking = null } = {}) {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   if (html) {
     const tracker = trackingDetails(tracking);
+    const mediaSource = createMediaStorage().publicOrigins().map(origin => ` ${origin}`).join("");
     const trackingSource = tracker ? ` ${tracker.origin}` : "";
     res.setHeader(
       "Content-Security-Policy",
@@ -340,11 +341,11 @@ function setSecurityHeaders(res, { html = false, tracking = null } = {}) {
         "base-uri 'self'",
         "object-src 'none'",
         "frame-ancestors 'self'",
-        "img-src 'self' data: blob:",
-        "media-src 'self'",
+        `img-src 'self' data: blob:${mediaSource}`,
+        `media-src 'self'${mediaSource}`,
         "style-src 'self' 'unsafe-inline'",
         `script-src 'self' 'unsafe-inline' 'unsafe-eval'${trackingSource}`,
-        `connect-src 'self'${trackingSource}`,
+        `connect-src 'self'${trackingSource}${mediaSource}`,
         "form-action 'self'",
       ].join("; "),
     );

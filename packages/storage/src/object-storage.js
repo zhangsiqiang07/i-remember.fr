@@ -142,6 +142,14 @@ export function createMediaStorage(options = {}) {
   }
   // Keep database identities stable; expose the object's own public domain at
   // response boundaries, and resolve those URLs back on editor submissions.
+  function publicOrigins() {
+    let raw;
+    try { raw = JSON.parse(readFileSync(configPath(), "utf8")); } catch (error) { if (error.code === "ENOENT") return []; throw error; }
+    return [...new Set(Object.values(unprotect(raw).profiles).flatMap(profile => {
+      const base = profile.publicBaseUrl || (profile.provider === "oss" ? `https://${profile.bucket}.oss-${profile.region}.aliyuncs.com` : "");
+      return base ? [new URL(base).origin] : [];
+    }))];
+  }
   function rewriteUrls(text, toInternal = false) {
     if (!String(text).includes(toInternal ? "https://" : "/uploads/")) return text;
     const raw = (() => { try { return JSON.parse(readFileSync(configPath(), "utf8")); } catch (error) { if (error.code === "ENOENT") return null; throw error; } })();
@@ -313,5 +321,5 @@ export function createMediaStorage(options = {}) {
     if (req.method === "HEAD" || !response.body) res.end(); else await pipeline(Readable.fromWeb(response.body), res);
     return true;
   }
-  return { settings, save, test, upload, rewriteUrls, delete: remove, getUrl: url, flushDirectory, read, serve, async exists(key) { return Boolean(await location(key)) || access(join(root(), storageKey(key))).then(() => true, () => false); } };
+  return { settings, save, test, upload, rewriteUrls, publicOrigins, delete: remove, getUrl: url, flushDirectory, read, serve, async exists(key) { return Boolean(await location(key)) || access(join(root(), storageKey(key))).then(() => true, () => false); } };
 }

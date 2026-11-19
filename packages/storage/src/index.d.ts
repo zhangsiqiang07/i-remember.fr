@@ -44,6 +44,7 @@ export type ObjectStorageSettings = {
   hasAccessKeySecret?: boolean;
 };
 export function createMediaStorage(options?: { rootDir?: string; dataDir?: string; fetch?: typeof fetch }): StorageAdapter & {
+  publicOrigins(): string[];
   rewriteUrls(text: string, toInternal?: boolean): string;
   settings(provider?: string): Promise<ObjectStorageSettings>;
   save(input: ObjectStorageSettings): Promise<ObjectStorageSettings>;

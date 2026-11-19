@@ -855,6 +855,10 @@ try {
     const crop = await fetch(cloudBase + attachment.url); assert.equal(crop.status, 200);
     assert.equal((await sharp(Buffer.from(await crop.arrayBuffer())).metadata()).width,600);
     await cloudStorage.save({ provider: "r2", bucket: "proxy-fixture", accountId: "a".repeat(32), accessKeyId: "fixture-id", accessKeySecret: "fixture-secret", publicBaseUrl: "https://media.example.com", prefix: "" });
+    const cloudHome = await fetch(cloudBase + "/");
+    const cloudPolicy = cloudHome.headers.get("content-security-policy");
+    for (const directive of ["img-src", "media-src", "connect-src"]) assert.match(cloudPolicy, new RegExp(`${directive}[^;]*https://media\\.example\\.com`));
+    assert.doesNotMatch(cloudPolicy, /(?:img-src|media-src|connect-src)[^;]*\*/);
     const publicForm = new FormData(); publicForm.set("local", new Blob([picture], {type:"image/png"}), "direct.png");
     const directUpload = await fetch(cloudBase + "/api/upload-image", {method:"POST",headers:{Origin:cloudBase},body:publicForm});
     const directData = (await directUpload.json()).data;

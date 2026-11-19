@@ -323,3 +323,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (2026-11-19)
 - Return configured OSS/R2 public media domains directly for managed cloud objects, retaining local URLs and stable editor/media identities.
 - Recognize JPEG/WebP and URL query strings in the public gallery preloader, and load remote textures with anonymous CORS.
+- Allow configured historical cloud media origins in image/media/connect CSP directives so direct OSS/R2 resources render without broad wildcard permissions.
