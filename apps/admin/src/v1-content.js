@@ -1,3 +1,10 @@
+export function ownerIdentity(settings = {}) {
+  const name = String(settings.ownerName || "").trim() || "Owner";
+  const words = name.split(/\s+/u);
+  const initials = (words.length > 1 ? words.slice(0, 2).map(word => [...word][0]).join("") : [...name].slice(0, 2).join("")).toUpperCase();
+  return { name, initials };
+}
+
 function pageStatus(value) {
   const normalized = String(value || "").toUpperCase();
   return ["PUBLISHED", "DRAFT", "ARCHIVED"].includes(normalized) ? normalized : "DRAFT";

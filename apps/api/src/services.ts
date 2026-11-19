@@ -93,10 +93,10 @@ function initialRuntimeSettings(): RuntimeSettings {
   const umamiWebsiteId = String(process.env.UMAMI_WEBSITE_ID || "");
   return {
     siteDescription: String(process.env.I_REMEMBER_SITE_DESCRIPTION ?? "A quiet place for the moments we might one day forget."),
-    ownerName: String(process.env.I_REMEMBER_OWNER_NAME ?? "Songqi Duan"),
-    ownerAlternateName: String(process.env.I_REMEMBER_OWNER_ALTERNATE_NAME ?? "段松岐"),
+    ownerName: String(process.env.I_REMEMBER_OWNER_NAME ?? "Owner"),
+    ownerAlternateName: String(process.env.I_REMEMBER_OWNER_ALTERNATE_NAME ?? ""),
     siteName: String(process.env.I_REMEMBER_SITE_NAME || "I remember,"),
-    siteTitle: String(process.env.I_REMEMBER_SITE_TITLE || "Songqi Duan | 段松岐"),
+    siteTitle: String(process.env.I_REMEMBER_SITE_TITLE || process.env.I_REMEMBER_OWNER_NAME || "I remember,"),
     canonicalUrl: String(process.env.I_REMEMBER_CANONICAL_URL || "https://songqi.org"),
     timezone: String(process.env.TZ || "Asia/Shanghai"),
     defaultLanguage,
@@ -126,7 +126,7 @@ function normalizedRuntimeSettings(values: Record<string, unknown>): RuntimeSett
     siteTitle:
       typeof values.siteTitle === "string" && values.siteTitle.trim()
         ? values.siteTitle.trim().slice(0, 120)
-        : "Songqi Duan | 段松岐",
+        : (String(values.ownerName || "").trim() || String(values.siteName || "").trim() || "I remember,").slice(0, 120),
     canonicalUrl:
       typeof values.canonicalUrl === "string" && values.canonicalUrl.trim()
         ? values.canonicalUrl.trim().slice(0, 500)

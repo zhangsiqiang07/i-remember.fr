@@ -621,7 +621,7 @@ const publicSettings = await json("/api/v1/public/settings");
 assert.equal(publicSettings.response.status, 200);
 assert.equal(publicSettings.response.headers.get("x-robots-tag"), "noindex, nofollow");
 assert.equal(publicSettings.body.data.siteName, "I remember,");
-assert.equal(publicSettings.body.data.siteTitle, "Songqi Duan | 段松岐");
+assert.equal(publicSettings.body.data.siteTitle, "I remember,");
 assert.equal(publicSettings.body.data.siteDescription, "A quiet place for the moments we might one day forget.");
 assert.equal(publicSettings.body.data.canonicalUrl, "https://songqi.org");
 assert.equal(publicSettings.body.data.timezone, "Asia/Shanghai");

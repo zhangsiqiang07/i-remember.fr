@@ -63,6 +63,7 @@ import { v1AuthPayload } from "./v1-auth.js";
 import { mergeV1Assets, v1AssetUploadPayload } from "./v1-assets.js";
 import {
   deleteV1MenuItem,
+  ownerIdentity,
   syncV1MenuItem,
   syncV1Page,
   syncV1Settings,
@@ -259,8 +260,8 @@ function v1MemoryAdmin(memory = {}) {
     id: memory.id,
     publicId: memory.id,
     title: memory.title,
-    author: memory.authorName || "Songqi",
-    authorName: memory.authorName || "Songqi",
+    author: memory.authorName || "",
+    authorName: memory.authorName || "",
     excerpt: memory.excerpt || String(memory.content || "").slice(0, 220),
     bodyMarkdown: memory.content || "",
     content: memory.content || "",
@@ -302,7 +303,7 @@ function v1MenuAdmin(item = {}) {
 function settingsFromV1(settings = {}, account = {}) {
   return {
     siteName: settings.siteName || "I remember,",
-    siteTitle: settings.siteTitle || "Songqi",
+    siteTitle: settings.siteTitle || settings.ownerName || settings.siteName || "I remember,",
     siteDescription: settings.siteDescription ?? "",
     ownerName: settings.ownerName ?? "",
     ownerAlternateName: settings.ownerAlternateName ?? "",
@@ -621,6 +622,7 @@ function useDialogFocusTrap(open, containerRef, initialFocusRef, onClose) {
 export function AdminApp() {
   const [authenticated, setAuthenticated] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [publicSettings, setPublicSettings] = useState({});
   const [checkingSession, setCheckingSession] = useState(true);
   const [route, setRoute] = useState(routeFromLocation);
   const [data, setData] = useState(null);
@@ -691,9 +693,11 @@ export function AdminApp() {
             .then(() => true)
             .catch(() => false)
         : false,
+      v1Api("/api/v1/public/settings").catch(() => ({})),
     ])
-      .then(([status, hasSession]) => {
+      .then(([status, hasSession, settings]) => {
         if (active) {
+          setPublicSettings(settings);
           setNeedsSetup(Boolean(status.needsSetup));
           setAuthenticated(Boolean(hasSession));
         }
@@ -888,6 +892,7 @@ export function AdminApp() {
     if (!canLeaveEditor(handleLogout)) return;
     reportDirty(false);
     adminToken("");
+    setPublicSettings(data?.settings || publicSettings);
     setAuthenticated(false);
     setData(null);
     window.history.replaceState({ route: "dashboard" }, "", "/admin");
@@ -1265,17 +1270,19 @@ export function AdminApp() {
     );
   }
 
+  const identitySettings = data?.settings || publicSettings;
   if (!authenticated) {
     if (needsSetup) {
-      return <SetupScreen loading={loading} onSetup={handleSetup} />;
+      return <SetupScreen settings={identitySettings} loading={loading} onSetup={handleSetup} />;
     }
-    return <LoginScreen loading={loading} onLogin={handleLogin} />;
+    return <LoginScreen settings={identitySettings} loading={loading} onLogin={handleLogin} />;
   }
 
   return (
     <main className="i-remember-admin dark min-h-screen bg-background text-foreground">
       <div className={cn("admin-shell", sidebarCollapsed && "is-collapsed")}>
         <AdminSidebar
+          settings={identitySettings}
           route={activeRoute}
           navigate={navigate}
           collapsed={sidebarCollapsed}
@@ -1390,6 +1397,7 @@ export function AdminApp() {
         action?.();
       }} />
       <MobileNavigationSheet
+        settings={identitySettings}
         open={mobileNavOpen}
         route={activeRoute}
         navigate={navigate}
@@ -1411,7 +1419,8 @@ export function AdminApp() {
   );
 }
 
-function LoginScreen({ loading, onLogin }) {
+function LoginScreen({ loading, onLogin, settings }) {
+  const { name: ownerName } = ownerIdentity(settings);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
@@ -1444,7 +1453,7 @@ function LoginScreen({ loading, onLogin }) {
           </h1>
           <p>Your memories, shared moments, and the details that make them yours.</p>
         </div>
-        <small>PERSONAL BLOG · SONGQI DUAN</small>
+        <small>PERSONAL BLOG · {ownerName}</small>
       </section>
       <section className="admin-auth-panel">
         <Card className="admin-auth-card">
@@ -1505,7 +1514,8 @@ function LoginScreen({ loading, onLogin }) {
   );
 }
 
-function SetupScreen({ loading, onSetup }) {
+function SetupScreen({ loading, onSetup, settings }) {
+  const { name: ownerName } = ownerIdentity(settings);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -1537,7 +1547,7 @@ function SetupScreen({ loading, onSetup }) {
           </h1>
           <p>Your memories, shared moments, and the details that make them yours.</p>
         </div>
-        <small>PERSONAL BLOG · SONGQI DUAN</small>
+        <small>PERSONAL BLOG · {ownerName}</small>
       </section>
       <section className="admin-auth-panel">
         <Card className="admin-auth-card admin-auth-card-setup">
@@ -1666,7 +1676,8 @@ function TopBarAction({
   );
 }
 
-function AdminSidebar({ route, navigate, collapsed, toggleCollapsed, openSearch, onLogout }) {
+function AdminSidebar({ route, navigate, collapsed, toggleCollapsed, openSearch, onLogout, settings }) {
+  const { name: ownerName, initials } = ownerIdentity(settings);
   return (
     <aside className="admin-sidebar">
       <div className="admin-sidebar-inner">
@@ -1730,13 +1741,13 @@ function AdminSidebar({ route, navigate, collapsed, toggleCollapsed, openSearch,
             className="admin-owner"
             onClick={onLogout}
             type="button"
-            title={collapsed ? "Songqi Duan · Sign out" : "Sign out"}
+            title={collapsed ? `${ownerName} · Sign out` : "Sign out"}
           >
-            <span className="admin-avatar">SD</span>
+            <span className="admin-avatar">{initials}</span>
             {!collapsed ? (
               <>
                 <span className="admin-owner-copy">
-                  <strong>Songqi Duan</strong>
+                  <strong>{ownerName}</strong>
                   <small>Owner</small>
                 </span>
               </>
@@ -1748,7 +1759,8 @@ function AdminSidebar({ route, navigate, collapsed, toggleCollapsed, openSearch,
   );
 }
 
-function MobileNavigationSheet({ open, route, navigate, openSearch, close, onLogout }) {
+function MobileNavigationSheet({ open, route, navigate, openSearch, close, onLogout, settings }) {
+  const { name: ownerName, initials } = ownerIdentity(settings);
   const sheetRef = useRef(null);
   const closeButtonRef = useRef(null);
   useDialogFocusTrap(open, sheetRef, closeButtonRef, close);
@@ -1810,9 +1822,9 @@ function MobileNavigationSheet({ open, route, navigate, openSearch, close, onLog
           ))}
         </nav>
         <button className="admin-owner" type="button" onClick={onLogout}>
-          <span className="admin-avatar">SD</span>
+          <span className="admin-avatar">{initials}</span>
           <span className="admin-owner-copy">
-            <strong>Songqi Duan</strong>
+            <strong>{ownerName}</strong>
             <small>Owner</small>
           </span>
           <span className="admin-signout">Sign out</span>
@@ -2128,7 +2140,7 @@ function DashboardView({ data, navigate, createMemory, createPage, editMemory })
                   >
                     <span>
                       <strong>{memory.title || memory.excerpt}</strong>
-                      <small>{memory.author || "Songqi"}</small>
+                      <small>{memory.author || ownerIdentity(data.settings).name}</small>
                     </span>
                     <StatusBadge value={memory.status} />
                     <time>
@@ -2428,7 +2440,7 @@ function MemoryEditorView({
         ? {
             id: null,
             title: "",
-            author: "Songqi Duan",
+            author: ownerIdentity(data.settings).name,
             locationName: "",
             excerpt: "",
             bodyMarkdown: "",
@@ -2441,7 +2453,7 @@ function MemoryEditorView({
             publicUrl: "",
           }
         : null),
-    [memory, isNew, data.settings?.defaultLanguage],
+    [memory, isNew, data.settings?.defaultLanguage, data.settings?.ownerName],
   );
   return (
     <MemoryEditor
@@ -2838,7 +2850,7 @@ function SettingsView({
   const account = settings.account || {};
   const [siteDraft, setSiteDraft] = useState(() => ({
     siteName: settings.siteName || "I remember,",
-    siteTitle: settings.siteTitle || "Songqi",
+    siteTitle: settings.siteTitle || settings.ownerName || settings.siteName || "I remember,",
     siteDescription: settings.siteDescription ?? "",
     ownerName: settings.ownerName ?? "",
     ownerAlternateName: settings.ownerAlternateName ?? "",
@@ -2868,7 +2880,7 @@ function SettingsView({
   useEffect(() => {
     setSiteDraft({
       siteName: settings.siteName || "I remember,",
-      siteTitle: settings.siteTitle || "Songqi",
+      siteTitle: settings.siteTitle || settings.ownerName || settings.siteName || "I remember,",
       siteDescription: settings.siteDescription ?? "",
       ownerName: settings.ownerName ?? "",
       ownerAlternateName: settings.ownerAlternateName ?? "",

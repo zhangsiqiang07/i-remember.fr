@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   deleteV1MenuItem,
+  ownerIdentity,
   syncV1MenuItem,
   syncV1Page,
   syncV1Settings,
@@ -147,3 +148,8 @@ await assert.rejects(
 );
 assert.equal(failedMenuWrites.length, 1);
 assert.equal(failedMenuWrites[0].options, undefined);
+
+assert.deepEqual(ownerIdentity({ownerName:"  Alice Chen  "}), {name:"Alice Chen", initials:"AC"});
+assert.deepEqual(ownerIdentity({ownerName:"陈小明"}), {name:"陈小明", initials:"陈小"});
+assert.deepEqual(ownerIdentity({ownerName:""}), {name:"Owner", initials:"OW"});
+assert.deepEqual(ownerIdentity({ownerName:"😀"}), {name:"😀", initials:"😀"});

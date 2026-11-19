@@ -1,12 +1,12 @@
 # Search engine setup
 
-The default identity is Songqi Duan / 段松岐 at https://songqi.org. Every deployment
+Owner identity comes from `ownerName` and optional `ownerAlternateName`; an unconfigured owner displays as `Owner`. Every deployment
 should review **Settings → Site** before launch. Save its own site name, homepage title, public
 origin, description, owner name, and optional alternate name. These are public
 identity fields, not the private account email or login credentials.
 
 The preferred search site name is **I remember,** (`siteName`), separate from the
-homepage title **Songqi Duan | 段松岐** (`siteTitle`). The homepage description is
+configured homepage title (`siteTitle`). The homepage description is
 **A quiet place for the moments we might one day forget.** `WebSite.name` and
 `og:site_name` use the site name; browser/search titles retain the homepage title.
 Existing installations initialize the new name without replacing saved titles,
