@@ -628,6 +628,10 @@
       'define.amd={jQuery:!0}})(),window.__REVIVAL_REQUIREJS__=requirejs,' +
       'window.__REVIVAL_REQUIRE__=require,window.__REVIVAL_DEFINE__=define,' +
       'define("../../build/almond"';
+    // Admin uploads preserve .jpeg/.webp filenames; cloud URLs may have query strings.
+    source = source.replace('r.extensions=["jpg","gif","png"]', 'r.extensions=["jpg","jpeg","gif","png","webp"]')
+      .replace('var n=t.extensions,r=n.length,i=e.length;', 'e=e.split(/[?#]/)[0].toLowerCase();var n=t.extensions,r=n.length,i=e.length;')
+      .replace('n=t.content=new Image;n.src=this.url', 'n=t.content=new Image;n.crossOrigin="anonymous";n.src=this.url');
     var patched = source.replace('var r=e&&v>0?e[v-1].id:-1', 'var r=e&&v>0?e[v-1].public_id:-1')
       .replace('"/api/related-post-count/"+e.id+', '"/api/related-post-count/"+e.public_id+')
       .replace('function T(e){b.dispatch({tagName:e.input.tagName})}', 'function T(t){var r=t&&t.input&&t.input.tagName||e.tagName;e.parsedTagName="";b.dispatch({tagName:r})}');

@@ -340,3 +340,7 @@ An empty local configuration still produces the existing v2 backup format. The
 admin JSON content export is not a backup of bucket files, cloud credentials or
 media indexes. Do not remove cloud configuration/index files when rolling back
 an application image.
+
+### Direct media URLs
+
+When OSS is selected, API responses and rendered content use the configured public media domain plus object prefix and key directly. If the domain is blank, the bucket’s public OSS endpoint is used. R2 uses its configured public/custom domain, or the private proxy when blank. Existing local files retain their website URLs. Public buckets/domains must permit anonymous image GET with CORS for the website (including WebGL/canvas); the application does not change bucket ACLs or CORS rules. Editor submissions resolve known cloud object URLs back to stable internal media identities, preserving usage tracking and deletion. Existing database records need no migration.

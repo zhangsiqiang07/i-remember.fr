@@ -1,3 +1,4 @@
+import { createMediaStorage } from "@i-remember/storage";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ApiError, errorBody } from "./errors.js";
 
@@ -176,7 +177,7 @@ export async function readJson(req: IncomingMessage, options: ReadJsonOptions = 
 
   if (!body.length) return {};
   try {
-    const value = JSON.parse(body.toString("utf8"));
+    const value = JSON.parse(createMediaStorage().rewriteUrls(body.toString("utf8"), true));
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("JSON object expected");
     }
@@ -192,7 +193,7 @@ export async function sendJson(res: ServerResponse, payload: unknown, statusCode
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Type", "application/json; charset=utf-8");
   }
-  res.end(JSON.stringify(payload));
+  res.end(createMediaStorage().rewriteUrls(JSON.stringify(payload)));
 }
 
 export async function handleErrors(res: ServerResponse, task: () => Promise<boolean>) {

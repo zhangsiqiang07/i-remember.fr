@@ -319,3 +319,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   data directory `/var/opt/i-remember.fr`, and DockerHub image
   `zerostwo/i-remember.fr`.
 - Added GitHub Actions publishing to DockerHub on `main` pushes and `v*` tags.
+
+### Fixed (2026-11-19)
+- Return configured OSS/R2 public media domains directly for managed cloud objects, retaining local URLs and stable editor/media identities.
+- Recognize JPEG/WebP and URL query strings in the public gallery preloader, and load remote textures with anonymous CORS.

@@ -22,10 +22,11 @@
     element.addEventListener("click", function (event) { event.stopPropagation(); action(); });
     return element;
   }
-  function fullUrl(fileId) { return "/uploads/posts/" + encodeURIComponent(fileId) + "/full.jpg"; }
+  function fullUrl(fileId) { var photo = state.photos.find(function (item) { return item.fileId === fileId; }); if (photo && photo.imageUrl) return photo.imageUrl; return "/uploads/posts/" + encodeURIComponent(fileId) + "/full.jpg"; }
   function loadImage(url) {
     if (!state.images.has(url)) state.images.set(url, new Promise(function (resolve, reject) {
       var image = new Image();
+      image.crossOrigin = "anonymous";
       image.onload = function () { resolve(image); };
       image.onerror = function () { state.images.delete(url); reject(new Error(label("Photo could not be loaded. Please try again.", "La photo n’a pas pu être chargée.", "照片加载失败，请重试。"))); };
       image.src = url;
@@ -112,7 +113,7 @@
             onUploaded: function () { showProgress({ phase: "processing", percent: null }); }
           });
         }
-        state.photos.push({ fileId: payload.data.fileId, type: payload.data.type || "image/jpeg", crop: { x: 0.5, y: 0.5, zoom: 1 } });
+        state.photos.push({ fileId: payload.data.fileId, imageUrl: payload.data.imageUrl || payload.data.posterUrl, type: payload.data.type || "image/jpeg", crop: { x: 0.5, y: 0.5, zoom: 1 } });
       }
     } catch (err) { failure = err.message; }
     finally {

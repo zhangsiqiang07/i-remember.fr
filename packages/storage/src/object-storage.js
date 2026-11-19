@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, readFileSync } from "node:fs";
 import { access, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
@@ -140,6 +140,45 @@ export function createMediaStorage(options = {}) {
     if (!profile) throw fail("The original storage profile for this media is missing", 503);
     return { marker, profile, info: marker.files[key] };
   }
+  // Keep database identities stable; expose the object's own public domain at
+  // response boundaries, and resolve those URLs back on editor submissions.
+  function rewriteUrls(text, toInternal = false) {
+    if (!String(text).includes(toInternal ? "https://" : "/uploads/")) return text;
+    const raw = (() => { try { return JSON.parse(readFileSync(configPath(), "utf8")); } catch (error) { if (error.code === "ENOENT") return null; throw error; } })();
+    if (!raw) return text;
+    const value = unprotect(raw), markers = new Map();
+    const baseFor = profile => profile.publicBaseUrl || (profile.provider === "oss" ? `https://${profile.bucket}.oss-${profile.region}.aliyuncs.com` : "");
+    const markerFor = key => {
+      const group = groupFor(key);
+      if (!markers.has(group)) {
+        try { markers.set(group, JSON.parse(readFileSync(indexPath(group), "utf8"))); }
+        catch (error) { if (error.code !== "ENOENT") throw error; markers.set(group, null); }
+      }
+      return markers.get(group);
+    };
+    return String(text).replace(/https?:\/\/[^\s<>"'\\()]+|\/uploads\/(?:admin|posts|tmp)\/[^\s<>"'\\()]+/g, original => {
+      const suffix = original.match(/[?#].*$/)?.[0] || "", path = original.slice(0, original.length - suffix.length);
+      try {
+        if (toInternal) {
+          for (const profile of Object.values(value.profiles)) {
+            const base = baseFor(profile); if (!base) continue;
+            const prefix = `${base}/${pathEncode(profile.prefix || "")}`.replace(/\/+$/, "") + "/";
+            if (!path.startsWith(prefix)) continue;
+            const key = storageKey(decodeURIComponent(path.slice(prefix.length))), marker = markerFor(key);
+            if (marker?.profileId === profile.id && marker.files[key]) return `${url(key)}${suffix}`;
+          }
+          return original;
+        }
+        if (!path.startsWith("/uploads/")) return original;
+        let key = storageKey(decodeURIComponent(path.slice(9)).replace(/^tmp\//, "posts/"));
+        const marker = markerFor(key), profile = value.profiles[marker?.profileId];
+        if (!profile || !baseFor(profile)) return original;
+        // Legacy cards requested a virtual square; the processed preview exists in the bucket.
+        if (!marker.files[key] && key.endsWith("/square.jpg")) key = key.replace(/square\.jpg$/, "resized.jpg");
+        return marker.files[key] ? `${baseFor(profile)}/${pathEncode([profile.prefix, key].filter(Boolean).join("/"))}${suffix}` : original;
+      } catch (error) { if (error.code === "object_storage_error") return original; throw error; }
+    });
+  }
   function url(key) { return `${(process.env.STORAGE_PUBLIC_BASE_URL || "/uploads").replace(/\/+$/, "")}/${storageKey(key)}`; }
   async function settings(provider) {
     if (provider && !["local", "oss", "r2"].includes(provider)) throw fail("Unknown storage provider");
@@ -159,7 +198,7 @@ export function createMediaStorage(options = {}) {
       else {
         // Credential rotations apply to historical profiles in the same bucket.
         for (const old of Object.values(value.profiles)) {
-          if (["provider", "bucket", "region", "accountId"].every(k => old[k] === profile[k])) Object.assign(old, { accessKeyId: profile.accessKeyId, accessKeySecret: profile.accessKeySecret });
+          if (["provider", "bucket", "region", "accountId"].every(k => old[k] === profile[k])) Object.assign(old, { accessKeyId: profile.accessKeyId, accessKeySecret: profile.accessKeySecret, publicBaseUrl: profile.publicBaseUrl });
         }
         const id = randomUUID(); value.profiles[id] = { ...profile, id }; value.active = id;
       }
@@ -274,5 +313,5 @@ export function createMediaStorage(options = {}) {
     if (req.method === "HEAD" || !response.body) res.end(); else await pipeline(Readable.fromWeb(response.body), res);
     return true;
   }
-  return { settings, save, test, upload, delete: remove, getUrl: url, flushDirectory, read, serve, async exists(key) { return Boolean(await location(key)) || access(join(root(), storageKey(key))).then(() => true, () => false); } };
+  return { settings, save, test, upload, rewriteUrls, delete: remove, getUrl: url, flushDirectory, read, serve, async exists(key) { return Boolean(await location(key)) || access(join(root(), storageKey(key))).then(() => true, () => false); } };
 }

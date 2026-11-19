@@ -358,7 +358,7 @@ function sendJson(req, res, payload, statusCode = 200) {
     req.method === "GET" &&
     callback &&
     /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(callback);
-  const json = JSON.stringify(payload);
+  const json = createMediaStorage().rewriteUrls(JSON.stringify(payload));
   const body = supportsJsonp ? `${callback}(${json});` : json;
 
   res.statusCode = statusCode;
@@ -386,7 +386,7 @@ function sendHtml(res, html, { tracking = null } = {}) {
   setSecurityHeaders(res, { html: true, tracking });
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.end(html);
+  res.end(createMediaStorage().rewriteUrls(html));
 }
 
 function clientAddress(req) {
@@ -1977,7 +1977,7 @@ async function handleRequest(backend, req, res, next, options = {}) {
 
     sendJson(req, res, {
       success: true,
-      data: { fileId },
+      data: { fileId, imageUrl: `/uploads/posts/${fileId}/full.jpg` },
     });
     return;
   }

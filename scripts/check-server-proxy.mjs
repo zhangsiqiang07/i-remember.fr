@@ -854,8 +854,17 @@ try {
     assert.match(attachment.url, /crop-/);
     const crop = await fetch(cloudBase + attachment.url); assert.equal(crop.status, 200);
     assert.equal((await sharp(Buffer.from(await crop.arrayBuffer())).metadata()).width,600);
+    await cloudStorage.save({ provider: "r2", bucket: "proxy-fixture", accountId: "a".repeat(32), accessKeyId: "fixture-id", accessKeySecret: "fixture-secret", publicBaseUrl: "https://media.example.com", prefix: "" });
+    const publicForm = new FormData(); publicForm.set("local", new Blob([picture], {type:"image/png"}), "direct.png");
+    const directUpload = await fetch(cloudBase + "/api/upload-image", {method:"POST",headers:{Origin:cloudBase},body:publicForm});
+    const directData = (await directUpload.json()).data;
+    assert.equal(directData.imageUrl, `https://media.example.com/posts/${directData.fileId}/full.jpg`, "Public uploads must return the configured media domain directly");
+    await cloudStorage.delete(`posts/${directData.fileId}`);
     await cloudStorage.save({ provider: "local" });
-    assert.equal((await fetch(`${cloudBase}/uploads/posts/${fileId}/thumb.jpg`)).status,200,"Old cloud photos remain readable after switching to local storage");
+    const legacyRedirect = await fetch(`${cloudBase}/uploads/posts/${fileId}/thumb.jpg`, {redirect:"manual"});
+    assert.equal(legacyRedirect.status,302);
+    assert.equal(legacyRedirect.headers.get("location"), `https://media.example.com/posts/${fileId}/thumb.jpg`);
+    assert.equal((await fetch(`${cloudBase}/uploads/posts/${fileId}/thumb.jpg`, {redirect:"manual"})).status,302,"Old cloud photos remain readable after switching to local storage");
     await cloudStorage.delete(`posts/${fileId}`); assert.equal(cloudBytes.size,0);
     console.log("Cloud public upload, local staging cleanup, remote crop, stable URLs and provider switching passed");
   } finally {

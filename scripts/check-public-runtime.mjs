@@ -76,6 +76,14 @@ assert.equal(
 assert.ok(source.includes("s=window.__REVIVAL_PUBLIC_SHARE_URL__(s),"));
 const originalMain = await readFile(new URL("../public/js/main.js", import.meta.url), "utf8");
 const patchedMain = runtimeFunction("patchLegacyMainSource")(originalMain);
+const imageExtensions = JSON.parse(patchedMain.match(/r\.extensions=(\[[^\]]+\])/)[1]);
+const extensionMatcher = patchedMain.match(/function d\(e,t\)\{if\(!e\)return;[^}]+\}/)[0];
+const detectsImage = runInNewContext(`(${extensionMatcher})`);
+for (const url of ['https://bucket.oss-cn-hangzhou.aliyuncs.com/remember/admin/photo.jpeg', 'https://media.example/photo.WEBP?v=1', '/uploads/admin/photo.jpg#preview']) {
+  assert.equal(detectsImage(url, { extensions: imageExtensions }), true, `Legacy preloader must accept ${url}`);
+}
+assert.ok(patchedMain.includes('n.crossOrigin="anonymous";n.src=this.url'), 'WebGL textures must request anonymous CORS before loading cloud images');
+
 assert.ok(patchedMain.includes("s=window.__REVIVAL_PUBLIC_SHARE_URL__(s),"));
 assert.ok(
   !patchedMain.includes("s=n.SITE_URL+s,"),

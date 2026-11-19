@@ -79,6 +79,19 @@ try {
   assert.equal((await storage.read(group + "/full.jpg")).data.toString(), "GIF89a-test", "Adding a file must preserve the group index");
   await storage.upload("admin/oss.png", Buffer.from("oss-image"), { contentType: "image/png" });
   assert.ok(requests.some(r => r.method === "PUT" && r.name.includes("oss-cn-hangzhou.aliyuncs.com")));
+  const ossUrl = "https://memories-test.oss-cn-hangzhou.aliyuncs.com/photos/admin/oss.png";
+  assert.equal(storage.rewriteUrls('/uploads/admin/oss.png'), ossUrl);
+  assert.equal(storage.rewriteUrls(ossUrl, true), '/uploads/admin/oss.png');
+  assert.equal(storage.rewriteUrls('/uploads/admin/old.jpg'), '/uploads/admin/old.jpg', 'Local images must retain local URLs');
+  assert.equal(storage.rewriteUrls('https://unrelated.example/uploads/admin/oss.png'), 'https://unrelated.example/uploads/admin/oss.png');
+  assert.equal(storage.rewriteUrls(ossUrl.replace('oss.png', 'unknown.png'), true), ossUrl.replace('oss.png', 'unknown.png'), 'External objects are not managed uploads');
+  await storage.save({ ...oss, publicBaseUrl: 'https://media.example.com/base/' });
+  const cdnUrl = 'https://media.example.com/base/photos/admin/oss.png';
+  assert.equal(storage.rewriteUrls('/uploads/admin/oss.png?download=1'), cdnUrl + '?download=1');
+  const payload = JSON.stringify({ attachments: [{url:'/uploads/admin/oss.png'}], content:'![photo](/uploads/admin/oss.png)' });
+  assert.deepEqual(JSON.parse(storage.rewriteUrls(storage.rewriteUrls(payload), true)), JSON.parse(payload), 'Editor round trips retain media identity and Markdown references');
+  assert.equal(restarted.rewriteUrls('/uploads/admin/oss.png'), cdnUrl, 'Separate processes see current configuration');
+
   await storage.save({ provider: "local" });
   assert.equal(await storage.exists("admin/cloud.png"), true);
   await assert.rejects(storage.upload("admin/cloud.png", "overwrite"), { code: "EEXIST" });
