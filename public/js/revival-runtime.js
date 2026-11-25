@@ -767,7 +767,7 @@
       )
       .replace(
         'float blinkRatio = step(.1, snoise(refPos.xz)) * snoise(refPos.xz * 1.0 + 30.0 + time * 0.05);\\n\\n    pAlpha = clamp(mix(0.5, .6 + .4 * blinkRatio, fixedPosNoiseRatio) * fading * pow(5., clamp(fixedPosNoiseRatio, 0., 1.)), 0., 1.);\\n\\n    alphaIntensity = 1.0 + abs(snoise(refPos.xz * 400.0) * .8) * (.3 + blinkRatio * .7);\\n\\n    gl_PointSize = mix(500.0, 5000.0, pow(zoom, 2.1))  / distanceToCamera * 6.0 * mix(0.4, 1.0, fixedPosNoiseRatio) * dpi * (.8 + blinkRatio * .3);\\n\\n    vZoom = zoom;',
-        'float elevNorm = clamp(mountainH / 170.0, 0.0, 1.0);\\n    float blinkRatio = 0.5 + 0.5 * snoise(refPos.xz * 1.05 + 30.0 + time * 0.06);\\n\\n    pAlpha = clamp((mix(0.46, .64 + .38 * blinkRatio, fixedPosNoiseRatio) * (0.52 + 0.68 * elevNorm) + energy * 0.48) * fading * pow(5., clamp(fixedPosNoiseRatio, 0., 1.)), 0., 1.);\\n\\n    alphaIntensity = 1.0 + abs(snoise(refPos.xz * 400.0) * .65) * (.25 + blinkRatio * .65);\\n\\n    gl_PointSize = mix(500.0, 4800.0, pow(zoom, 2.1)) / distanceToCamera * 6.0 * mix(0.38, 1.08, clamp(fixedPosNoiseRatio * 0.72 + elevNorm * 0.28, 0., 1.)) * dpi * (.8 + blinkRatio * .28) * (1.0 + energy * 0.42);\\n\\n    vZoom = zoom;\\n    vMountainElev = elevNorm;\\n    vEnergy = energy;'
+        'float elevNorm = clamp(mountainH / 170.0, 0.0, 1.0);\\n    float blinkRatio = 0.5 + 0.5 * snoise(refPos.xz * 1.05 + 30.0 + time * 0.06);\\n    float nearClipFade = smoothstep(45.0, 145.0, distanceToCamera);\\n    float zoomDensityFade = 1.0 - smoothstep(0.45, 1.0, zoom) * 0.34;\\n\\n    pAlpha = clamp((mix(0.46, .64 + .38 * blinkRatio, fixedPosNoiseRatio) * (0.52 + 0.68 * elevNorm) + energy * 0.48) * fading * nearClipFade * zoomDensityFade * pow(5., clamp(fixedPosNoiseRatio, 0., 1.)), 0., 1.);\\n\\n    alphaIntensity = 1.0 + abs(snoise(refPos.xz * 400.0) * .65) * (.25 + blinkRatio * .65);\\n\\n    float rawPointSize = mix(460.0, 1550.0, pow(zoom, 1.6)) / max(distanceToCamera, 95.0) * 5.2 * mix(0.38, 1.02, clamp(fixedPosNoiseRatio * 0.72 + elevNorm * 0.28, 0., 1.)) * dpi * (.82 + blinkRatio * .24) * (1.0 + energy * 0.28);\\n    gl_PointSize = clamp(rawPointSize, 1.2 * dpi, mix(18.0, 26.0, zoom) * dpi);\\n\\n    vZoom = zoom;\\n    vMountainElev = elevNorm;\\n    vEnergy = energy;'
       )
       .replace(
         'varying float vZoom;\\n// uniform sampler2D tDiffuse;',
@@ -775,11 +775,11 @@
       )
       .replace(
         'float distanceToCenter = length(gl_PointCoord.xy - .5) * 2.;\\n\\n    gl_FragColor.a = (step(0., distanceToCenter) - step(.25, distanceToCenter)) * 1.;\\n    gl_FragColor.a += (step(.25, distanceToCenter) - step(.27, distanceToCenter)) * mix(1., .4, (distanceToCenter - .25) / (.27 - .25));\\n    gl_FragColor.a += (step(.27, distanceToCenter) - step(.3, distanceToCenter)) * mix(.4, .15, (distanceToCenter - .27) / (.3 - .27));\\n    gl_FragColor.a += (step(.3, distanceToCenter) - step(1., distanceToCenter)) * mix(.15, 0., (distanceToCenter - .3) / (1. - .3));\\n\\n    gl_FragColor.a = pow(abs(gl_FragColor.a), alphaIntensity) * pAlpha * ( 1. - clampNorm(vZoom, .75, 1.) * .4);',
-        'vec2 starUv = (gl_PointCoord.xy - .5) * 2.;\\n    float d2 = dot(starUv, starUv);\\n    if (d2 > 1.) discard;\\n    float inv2 = 1. - d2;\\n    float core = smoothstep(.22, .02, d2);\\n    float halo = inv2 * inv2 * .36;\\n    float shape = clamp(core * .88 + halo, 0., 1.);\\n    vec3 valleyTint = mix(vec3(.55, .68, .92), vec3(.98, .96, .92), vMountainElev);\\n    vec3 baseCol = mix(gl_FragColor.rgb * valleyTint, vec3(.96, .98, 1.), core * (.14 + .22 * vMountainElev));\\n    gl_FragColor.rgb = mix(baseCol, vec3(.78, .90, 1.), vEnergy * .72);\\n    gl_FragColor.a = pow(max(shape, 0.001), alphaIntensity * .85) * pAlpha * ( 1. - clampNorm(vZoom, .75, 1.) * .4);'
+        'vec2 starUv = (gl_PointCoord.xy - .5) * 2.;\\n    float d2 = dot(starUv, starUv);\\n    if (d2 > 1.) discard;\\n    float inv2 = 1. - d2;\\n    float zClamped = clamp(vZoom, 0., 1.);\\n    float core = smoothstep(mix(.085, .048, zClamped), .008, d2);\\n    float halo2 = inv2 * inv2;\\n    float halo = halo2 * halo2 * mix(.28, .14, zClamped);\\n    float shape = clamp(core * .96 + halo, 0., 1.);\\n    vec3 valleyTint = mix(vec3(.55, .68, .92), vec3(.98, .96, .92), vMountainElev);\\n    vec3 baseCol = mix(gl_FragColor.rgb * valleyTint, vec3(.96, .98, 1.), core * (.18 + .24 * vMountainElev));\\n    gl_FragColor.rgb = mix(baseCol, vec3(.78, .90, 1.), vEnergy * .72);\\n    gl_FragColor.a = pow(max(shape, 0.001), alphaIntensity * .92) * pAlpha * ( 1. - clampNorm(vZoom, .75, 1.) * .4);'
       )
       .replace(
         'float distanceToCenter = length(gl_PointCoord.xy - .5) * 2.;\\n\\n    float alpha = (step(0., distanceToCenter) - step(.25, distanceToCenter)) * mix(1., .4, distanceToCenter / .25);\\n    alpha += (step(.25, distanceToCenter) - step(.3, distanceToCenter)) * mix(.4, .15, (distanceToCenter - .25) / (.3 - .25));\\n    alpha += (step(.3, distanceToCenter) - step(1., distanceToCenter)) * mix(.15, 0., (distanceToCenter - .3) / (1. - .3));\\n    alpha = pow(abs(alpha), alphaIntensity) * pAlpha;',
-        'vec2 starUv = (gl_PointCoord.xy - .5) * 2.;\\n    float d2 = dot(starUv, starUv);\\n    if (d2 > 1.) discard;\\n    float distanceToCenter = sqrt(d2);\\n    float inv2 = 1. - d2;\\n    float core = smoothstep(.24, .02, d2);\\n    float alpha = pow(max(clamp(core * .88 + inv2 * inv2 * .36, 0., 1.), 0.001), alphaIntensity * .85) * pAlpha;'
+        'vec2 starUv = (gl_PointCoord.xy - .5) * 2.;\\n    float d2 = dot(starUv, starUv);\\n    if (d2 > 1.) discard;\\n    float distanceToCenter = sqrt(d2);\\n    float inv2 = 1. - d2;\\n    float core = smoothstep(.075, .008, d2);\\n    float halo2 = inv2 * inv2;\\n    float alpha = pow(max(clamp(core * .96 + halo2 * halo2 * .24, 0., 1.), 0.001), alphaIntensity * .92) * pAlpha;'
       )
       .replace(
         'if(revivalHit){revivalHit.onClick();return}',
@@ -2879,16 +2879,16 @@
       "  float d2 = dot(uv, uv);",
       "  if (d2 > 1.0) discard;",
       "  float inv2 = 1.0 - d2;",
-      "  float core = smoothstep(0.22, 0.02, d2);",
-      "  float halo = inv2 * inv2 * 0.36;",
+      "  float core = smoothstep(0.08, 0.008, d2);",
+      "  float halo = inv2 * inv2 * inv2 * 0.26;",
       "  float spikes = 0.0;",
       "  if (vFlare > 0.02) {",
-      "    float sx = max(0.0, 1.0 - abs(uv.y) * 7.5) * max(0.0, 1.0 - abs(uv.x) * 1.45);",
-      "    float sy = max(0.0, 1.0 - abs(uv.x) * 7.5) * max(0.0, 1.0 - abs(uv.y) * 1.45);",
-      "    spikes = (sx * sx + sy * sy) * vFlare * 0.65;",
+      "    float sx = max(0.0, 1.0 - abs(uv.y) * 8.5) * max(0.0, 1.0 - abs(uv.x) * 1.45);",
+      "    float sy = max(0.0, 1.0 - abs(uv.x) * 8.5) * max(0.0, 1.0 - abs(uv.y) * 1.45);",
+      "    spikes = (sx * sx + sy * sy) * vFlare * 0.6;",
       "  }",
-      "  float intensity = clamp(core * 0.9 + halo + spikes, 0.0, 1.1);",
-      "  vec3 finalColor = mix(vColor, vec3(1.0), core * 0.5);",
+      "  float intensity = clamp(core * 0.96 + halo + spikes, 0.0, 1.1);",
+      "  vec3 finalColor = mix(vColor, vec3(1.0), core * 0.55);",
       "  gl_FragColor = vec4(finalColor, intensity * vAlpha);",
       "}"
     ].join("\n");
@@ -2964,11 +2964,11 @@
         "  float edgeFade = 1.0 - smoothstep(480.0, 800.0, distXZ);",
         "  vec4 mvPos = modelViewMatrix * vec4(worldPos, 1.0);",
         "  float dist = max(1.0, length(mvPos.xyz));",
-        "  float nearFade = smoothstep(35.0, 150.0, dist);",
+        "  float nearFade = smoothstep(60.0, 190.0, dist);",
         "  float pulse = 0.72 + 0.28 * sin(uTime * 1.1 + aPhase * 3.0);",
         "  vColor = mix(aColor, vec3(0.84, 0.94, 1.0), uWarp * 0.45);",
         "  vAlpha = clamp(edgeFade * nearFade * pulse * uOpacity * (0.68 + uWarp * 0.55), 0.0, 1.0);",
-        "  gl_PointSize = clamp((aSize * 340.0 / dist) * uDpi * (1.0 + uWarp * 0.4), 1.0, 10.0 * uDpi);",
+        "  gl_PointSize = clamp((aSize * 300.0 / dist) * uDpi * (1.0 + uWarp * 0.3), 1.0, 6.5 * uDpi);",
         "  gl_Position = projectionMatrix * mvPos;",
         "}"
       ].join("\n"),
@@ -2981,9 +2981,9 @@
         "  float d2 = dot(uv, uv);",
         "  if (d2 > 1.0) discard;",
         "  float inv2 = 1.0 - d2;",
-        "  float core = smoothstep(0.24, 0.02, d2);",
-        "  float intensity = clamp(core * 0.85 + inv2 * inv2 * 0.35, 0.0, 1.0);",
-        "  gl_FragColor = vec4(mix(vColor, vec3(1.0), core * 0.4), intensity * vAlpha);",
+        "  float core = smoothstep(0.075, 0.008, d2);",
+        "  float intensity = clamp(core * 0.95 + inv2 * inv2 * inv2 * 0.24, 0.0, 1.0);",
+        "  gl_FragColor = vec4(mix(vColor, vec3(1.0), core * 0.45), intensity * vAlpha);",
         "}"
       ].join("\n"),
       blending: THREE.AdditiveBlending,
@@ -3342,9 +3342,9 @@
       skyState.celestialRings[ri].mat.opacity = ringOpacity * (1 - ri * 0.18);
     }
 
-    // Relativistic RGB chromatic shift on fast travel/zoom
+    // Relativistic RGB chromatic shift on fast travel/zoom (kept subtle when zoomed in)
     if (rgbShiftPass && rgbShiftPass.uniforms && rgbShiftPass.uniforms.amount) {
-      rgbShiftPass.uniforms.amount.value = 0.0004 + skyState.warp * 0.0011;
+      rgbShiftPass.uniforms.amount.value = 0.00028 * (1 - zoomVal * 0.45) + skyState.warp * 0.00055;
     }
 
     // Pointer-to-terrain gravitational field uniform
