@@ -512,36 +512,62 @@
     // Particle meshes are recycled as the camera moves. Memory ownership belongs
     // to the world grid, and must survive recycling, searches and camera resets.
     var coordinates = new Map();
+    var claimedIds = new Set();
     var known = new Set();
     var queue = [];
     var cursor = 0;
     var lastPosts;
     var lastLength = -1;
+    function syncQueue() {
+      var posts = getPosts();
+      if (posts !== lastPosts || posts.length !== lastLength) {
+        uniqueMapPosts(posts).forEach(function (post) {
+          var identity = String(post.public_id || post.publicId || post.uid || post.id);
+          if (!known.has(identity)) {
+            known.add(identity);
+            queue.push(post);
+          }
+        });
+        lastPosts = posts;
+        lastLength = posts.length;
+      }
+    }
     return {
       atGrid: function (x, y) {
         var coordinate = x + ":" + y;
         if (coordinates.has(coordinate)) return coordinates.get(coordinate);
-        var posts = getPosts();
-        if (posts !== lastPosts || posts.length !== lastLength) {
-          uniqueMapPosts(posts).forEach(function (post) {
-            var identity = String(post.public_id || post.publicId || post.uid || post.id);
-            if (!known.has(identity)) {
-              known.add(identity);
-              queue.push(post);
-            }
-          });
-          lastPosts = posts;
-          lastLength = posts.length;
+        syncQueue();
+        while (cursor < queue.length) {
+          var candidate = queue[cursor++];
+          var cid = String(candidate.public_id || candidate.publicId || candidate.uid || candidate.id);
+          if (claimedIds.has(cid)) continue;
+          claimedIds.add(cid);
+          coordinates.set(coordinate, candidate);
+          return candidate;
         }
-        if (cursor >= queue.length) {
-          // Do not memoize empty cells: a subsequent page or new submission can
-          // fill one. Never wrap the queue back to an already assigned memory.
-          requestMore();
-          return null;
-        }
-        var post = queue[cursor++];
+        // Do not memoize empty cells: a subsequent page or new submission can
+        // fill one. Never wrap the queue back to an already assigned memory.
+        requestMore();
+        return null;
+      },
+      claim: function (x, y, post) {
+        if (!post) return false;
+        syncQueue();
+        var identity = String(post.public_id || post.publicId || post.uid || post.id);
+        if (claimedIds.has(identity)) return false;
+        var coordinate = x + ":" + y;
+        if (coordinates.has(coordinate)) return false;
+        claimedIds.add(identity);
         coordinates.set(coordinate, post);
-        return post;
+        return true;
+      },
+      entries: function () {
+        var list = [];
+        coordinates.forEach(function (post, key) {
+          var parts = key.split(":");
+          list.push({ w: parseInt(parts[0], 10), E: parseInt(parts[1], 10), post: post });
+        });
+        return list;
       }
     };
   }
@@ -731,7 +757,7 @@
         'function A(){var e=l[""],t=e[d];return t?(d++,t):(S(),null)}')
       .replace('e.takePost=A}', 'e.takePost=A,e.loadMorePosts=S}')
       .replace('var v=e.particles=[],m,g;',
-        'var v=e.particles=[],m,g,revivalMap=window.__REVIVAL_CREATE_MEMORY_MAP_INDEX__(function(){return r.tagNamedPosts[""]||[]},function(){r.loadMorePosts()});')
+        'var v=e.particles=[],m,g,revivalMap=window.__REVIVAL_CREATE_MEMORY_MAP_INDEX__(function(){return r.tagNamedPosts[""]||[]},function(){r.loadMorePosts()});window.__REVIVAL_ACTIVE_MAP__=revivalMap;')
       .replace('t=new n({type:"nav",visible:!0})', 't=new n({type:"nav",visible:!1})')
       .replace('function b(){var e=i.cameraPosition,t=i.lookAtPosition',
         'function b(){if(window.__REVIVAL_MEMORY_SEARCH_VISIBLE__()){for(var revivalSlot=0;revivalSlot<v.length;revivalSlot++)v[revivalSlot].visible=v[revivalSlot].interactive=!1;return []}var e=i.cameraPosition,t=i.lookAtPosition')
@@ -783,11 +809,11 @@
       )
       .replace(
         'if(revivalHit){revivalHit.onClick();return}',
-        'if(revivalHit){revivalHit.onClick();return}if(e.canInteractiveWithPost&&t.target&&t.target.closest&&t.target.closest(".base-3d-container")){window.__REVIVAL_TRIGGER_PULSE__&&window.__REVIVAL_TRIGGER_PULSE__(wt,Et,it,at,b.Vector3,0.95);if(window.__REVIVAL_PICK_SKY_OR_DOT__&&window.__REVIVAL_PICK_SKY_OR_DOT__(wt,Et,it,at,b.Vector3,true)){return}}'
+        'if(revivalHit){revivalHit.onClick();return}if(e.canInteractiveWithPost&&t.target&&t.target.closest&&t.target.closest(".base-3d-container")){window.__REVIVAL_TRIGGER_PULSE__&&window.__REVIVAL_TRIGGER_PULSE__(wt,Et,it,at,b.Vector3,0.95);if(window.__REVIVAL_PICK_MEMORY_BEACON__&&window.__REVIVAL_PICK_MEMORY_BEACON__(wt,Et,it,at,b.Vector3,e.zoom,true)){return}}'
       )
       .replace(
         'e.canInteractiveWithPost&&(t.isDoubleClick||t.isClick&&bt&&(bt.onOut(),bt.onClick(),bt=null))',
-        'e.canInteractiveWithPost&&(t.isDoubleClick||(t.isClick&&(window.__REVIVAL_TRIGGER_PULSE__&&window.__REVIVAL_TRIGGER_PULSE__(wt,Et,it,at,b.Vector3,0.95),bt?(bt.onOut(),bt.onClick(),bt=null):(t.target&&t.target.closest&&t.target.closest(".base-3d-container")&&window.__REVIVAL_PICK_SKY_OR_DOT__&&window.__REVIVAL_PICK_SKY_OR_DOT__(wt,Et,it,at,b.Vector3,true)))))'
+        'e.canInteractiveWithPost&&(t.isDoubleClick||(t.isClick&&(window.__REVIVAL_TRIGGER_PULSE__&&window.__REVIVAL_TRIGGER_PULSE__(wt,Et,it,at,b.Vector3,0.95),bt?(bt.onOut(),bt.onClick(),bt=null):(t.target&&t.target.closest&&t.target.closest(".base-3d-container")&&window.__REVIVAL_PICK_MEMORY_BEACON__&&window.__REVIVAL_PICK_MEMORY_BEACON__(wt,Et,it,at,b.Vector3,e.zoom,true)))))'
       )
       .replace(
         'e.targetZoom=y(e.targetZoom+t*.05,0,1)',
@@ -795,7 +821,7 @@
       )
       .replace(
         'bt?H.cursor="pointer":e.hasControl?(H.cursor=K?"grabbing":"grab",H.cursor=K?"-webkit-grabbing":"-webkit-grab"):H.cursor="auto"',
-        '(bt||(e.canInteractiveWithPost&&!K&&window.__REVIVAL_HOVER_SKY_OR_DOT__&&window.__REVIVAL_HOVER_SKY_OR_DOT__(wt,Et,it,at,b.Vector3)))?H.cursor="pointer":e.hasControl?(H.cursor=K?"grabbing":"grab",H.cursor=K?"-webkit-grabbing":"-webkit-grab"):H.cursor="auto"'
+        '(bt||(e.canInteractiveWithPost&&!K&&window.__REVIVAL_HOVER_MEMORY_BEACON__&&window.__REVIVAL_HOVER_MEMORY_BEACON__(wt,Et,it,at,b.Vector3,u)))?H.cursor="pointer":e.hasControl?(H.cursor=K?"grabbing":"grab",H.cursor=K?"-webkit-grabbing":"-webkit-grab"):H.cursor="auto"'
       )
       .replace(
         'it.translateY(Math.sin(ct*2)*_/2),it.lookAt(R.position)',
@@ -3048,6 +3074,95 @@
     constellationLines.frustumCulled = false;
     scene.add(constellationLines);
 
+    // 6. 1-to-1 Blinking Memory Beacons (each blinking ringed light point = 1 real unique Memory)
+    var maxBeacons = 256;
+    var beaconGeo = new THREE.Geometry();
+    var beaconPhases = [];
+    var beaconActive = [];
+    var beaconHover = [];
+    for (var bi = 0; bi < maxBeacons; bi += 1) {
+      beaconGeo.vertices.push(new THREE.Vector3(0, -99999, 0));
+      beaconPhases.push((bi * 1.6180339) % (Math.PI * 2));
+      beaconActive.push(0.0);
+      beaconHover.push(0.0);
+    }
+    var beaconUniforms = {
+      uTime: { type: "f", value: 0 },
+      uDpi: { type: "f", value: window.devicePixelRatio || 1 },
+      uOpacity: { type: "f", value: 1.0 }
+    };
+    var beaconAttributes = {
+      aPhase: { type: "f", value: beaconPhases },
+      aActive: { type: "f", value: beaconActive },
+      aHover: { type: "f", value: beaconHover }
+    };
+    var beaconMat = new THREE.ShaderMaterial({
+      uniforms: beaconUniforms,
+      attributes: beaconAttributes,
+      vertexShader: [
+        "attribute float aPhase;",
+        "attribute float aActive;",
+        "attribute float aHover;",
+        "uniform float uTime;",
+        "uniform float uDpi;",
+        "uniform float uOpacity;",
+        "varying float vBlink;",
+        "varying float vHover;",
+        "varying float vAlpha;",
+        "void main() {",
+        "  if (aActive < 0.5 || uOpacity < 0.01) {",
+        "    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);",
+        "    gl_PointSize = 0.0;",
+        "    vBlink = 0.0;",
+        "    vHover = 0.0;",
+        "    vAlpha = 0.0;",
+        "    return;",
+        "  }",
+        "  float wave = 0.5 + 0.5 * sin(uTime * 2.2 + aPhase);",
+        "  float blink = 0.24 + 0.76 * pow(wave, 1.45);",
+        "  vec4 mvPos = modelViewMatrix * vec4(position, 1.0);",
+        "  float dist = max(70.0, length(mvPos.xyz));",
+        "  float baseSize = clamp(2400.0 / dist, 15.0, 34.0) * uDpi;",
+        "  gl_PointSize = baseSize * (0.88 + 0.22 * blink + aHover * 0.45);",
+        "  vBlink = blink;",
+        "  vHover = aHover;",
+        "  vAlpha = uOpacity;",
+        "  gl_Position = projectionMatrix * mvPos;",
+        "}"
+      ].join("\n"),
+      fragmentShader: [
+        "precision mediump float;",
+        "varying float vBlink;",
+        "varying float vHover;",
+        "varying float vAlpha;",
+        "void main() {",
+        "  if (vAlpha < 0.01) discard;",
+        "  vec2 uv = (gl_PointCoord.xy - 0.5) * 2.0;",
+        "  float d2 = dot(uv, uv);",
+        "  if (d2 > 1.0) discard;",
+        "  float d = sqrt(d2);",
+        "  float inv2 = 1.0 - d2;",
+        "  float core = smoothstep(0.085, 0.008, d2) * (0.45 + 0.75 * vBlink + vHover * 0.35);",
+        "  float glow = inv2 * inv2 * inv2 * (0.18 + 0.24 * vBlink);",
+        "  float ring = exp(-pow((d - 0.58) * 9.0, 2.0)) * (0.34 + 0.44 * vBlink + vHover * 0.52);",
+        "  float intensity = clamp(core + glow + ring, 0.0, 1.25);",
+        "  vec3 warmGold = vec3(1.0, 0.92, 0.74);",
+        "  vec3 hoverCyan = vec3(0.78, 0.94, 1.0);",
+        "  vec3 col = mix(warmGold, hoverCyan, clamp(vHover * 0.85, 0.0, 1.0));",
+        "  col = mix(col, vec3(1.0), core * 0.55);",
+        "  gl_FragColor = vec4(col, intensity * vAlpha);",
+        "}"
+      ].join("\n"),
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      fog: false
+    });
+    var memoryBeaconParticles = new THREE.ParticleSystem(beaconGeo, beaconMat);
+    memoryBeaconParticles.frustumCulled = false;
+    scene.add(memoryBeaconParticles);
+
     var meteors = [];
     if (!reducedMotion && !deterministic) {
       for (var m = 0; m < 2; m += 1) {
@@ -3093,6 +3208,18 @@
       constellationGeo: cGeo,
       maxConstellationSegs: maxConstellationSegs,
       constellationNodes: [],
+      memoryBeacons: memoryBeaconParticles,
+      beaconGeo: beaconGeo,
+      beaconMat: beaconMat,
+      beaconUniforms: beaconUniforms,
+      beaconActive: beaconActive,
+      beaconHover: beaconHover,
+      maxBeacons: maxBeacons,
+      beacons: [],
+      beaconById: {},
+      occupiedCells: {},
+      lastBeaconSyncCount: -1,
+      hoveredBeaconIdx: -1,
       meteors: meteors,
       starPositions: starPositions,
       unitDirs: unitDirs,
@@ -3250,11 +3377,19 @@
           }
         }
 
-        // Bridge hovered foreground memory particle toward the nearest sky star
-        if (hoveredPost && hoveredPost.position && nodes.length && segIdx < maxSegs) {
-          var hdx = hoveredPost.position.x - cameraPos.x;
-          var hdy = hoveredPost.position.y - cameraPos.y;
-          var hdz = hoveredPost.position.z - cameraPos.z;
+        // Bridge hovered foreground memory particle (or hovered Memory Beacon) toward the nearest sky star
+        var bridgePos = hoveredPost && hoveredPost.position
+          ? hoveredPost.position
+          : (skyState.hoveredBeaconIdx >= 0 && skyState.beacons[skyState.hoveredBeaconIdx]
+            ? skyState.beacons[skyState.hoveredBeaconIdx]
+            : null);
+        if (bridgePos && nodes.length && segIdx < maxSegs) {
+          var bx = bridgePos.x !== undefined ? bridgePos.x : bridgePos.wx;
+          var by = bridgePos.y !== undefined ? bridgePos.y : bridgePos.wy;
+          var bz = bridgePos.z !== undefined ? bridgePos.z : bridgePos.wz;
+          var hdx = bx - cameraPos.x;
+          var hdy = by - cameraPos.y;
+          var hdz = bz - cameraPos.z;
           var hx = hdx * cosR + hdz * sinR;
           var hz = -hdx * sinR + hdz * cosR;
           var topStar = nodes[0].idx * 3;
@@ -3402,6 +3537,8 @@
       }
     }
 
+    syncMemoryBeacons(zoomVal, fading);
+
     updateConstellations(cameraPos, camera, projector, Vector3, ndcX, ndcY, hasControl, hoveredPost);
 
     for (var i = 0; i < skyState.meteors.length; i += 1) {
@@ -3444,22 +3581,175 @@
   function availableMemoryPosts() {
     var runtime = window.__REVIVAL_REQUIREJS__ || window.requirejs;
     var postCtrl = runtime && runtime._defined && runtime._defined.postController;
-    if (!postCtrl || !postCtrl.tagNamedPosts) return [];
-    var posts = postCtrl.tagNamedPosts[""] || [];
-    if (!posts.length && postCtrl.loadMorePosts) postCtrl.loadMorePosts();
-    return posts;
+    if (!postCtrl || !postCtrl.tagNamedPosts || !postCtrl.tagNamedPosts[""]) return [];
+    var posts = postCtrl.tagNamedPosts[""];
+    return window.__REVIVAL_UNIQUE_MAP_POSTS__ ? window.__REVIVAL_UNIQUE_MAP_POSTS__(posts) : posts;
   }
 
-  function pickSkyOrDot(ndcX, ndcY, camera, projector, Vector3, openMemory) {
+  function computeBeaconCoords(w, E, T) {
+    var M = w * 10;
+    var _ = E * 10;
+    var wx = M + (T(M * 0.3, _ * 0.3) - 0.5) * 8;
+    var wz = _ + (T(M * 0.4, _ * 0.4) - 0.5) * 8;
+    var r1 = 1 - Math.abs(T(M * 0.0014 + 4, _ * 0.0014 + 4));
+    var r2 = 1 - Math.abs(T(M * 0.0032 + 17.3, _ * 0.0032 + 17.3));
+    var wy = -115 + r1 * r1 * 125 + r2 * r2 * 45 + T(M * 200 + 12, _ * 200 + 12) * 10;
+    return { wx: wx, wy: wy, wz: wz };
+  }
+
+  function syncMemoryBeacons(zoomVal, fading) {
+    if (!skyState || !skyState.memoryBeacons) return;
+
+    var searchHidden = window.__REVIVAL_MEMORY_SEARCH_VISIBLE__ && window.__REVIVAL_MEMORY_SEARCH_VISIBLE__();
+    var zoomFade = zoomVal <= 0.68 ? 1 : zoomVal >= 0.86 ? 0 : 1 - (zoomVal - 0.68) / 0.18;
+    var fadeFactor = typeof fading === "number" ? Math.max(0, Math.min(1, fading)) : 1;
+    skyState.beaconUniforms.uTime.value = skyState.uniforms.uTime.value;
+    skyState.beaconUniforms.uOpacity.value = searchHidden ? 0 : zoomFade * fadeFactor;
+
+    var runtime = window.__REVIVAL_REQUIREJS__ || window.requirejs;
+    var noiseUtils = runtime && runtime._defined && runtime._defined["utils/noiseUtils"];
+    var T = noiseUtils && noiseUtils.snoise2D;
+    if (!T) return;
+
+    var posts = availableMemoryPosts();
+    var mapIndex = window.__REVIVAL_ACTIVE_MAP__;
+    var changed = false;
+
+    // 1. Sync any coordinates already claimed by navPostParticles
+    if (mapIndex && mapIndex.entries) {
+      var claimed = mapIndex.entries();
+      for (var ci = 0; ci < claimed.length && skyState.beacons.length < skyState.maxBeacons; ci += 1) {
+        var entry = claimed[ci];
+        var cid = String(entry.post.public_id || entry.post.publicId || entry.post.uid || entry.post.id);
+        if (skyState.beaconById[cid]) continue;
+        var pos = computeBeaconCoords(entry.w, entry.E, T);
+        var beacon = { id: cid, post: entry.post, w: entry.w, E: entry.E, wx: pos.wx, wy: pos.wy, wz: pos.wz };
+        skyState.beaconById[cid] = beacon;
+        skyState.occupiedCells[entry.w + ":" + entry.E] = true;
+        skyState.beacons.push(beacon);
+        changed = true;
+      }
+    }
+
+    // 2. Assign 1 unique spaced N > 0.75 cell per unplaced real memory
+    if (posts.length !== skyState.lastBeaconSyncCount) {
+      skyState.lastBeaconSyncCount = posts.length;
+      var w = 0, E = 0, S = 0, z = 0.5;
+      var spiralIdx = 0;
+      var maxSpiral = 12000;
+
+      for (var pi = 0; pi < posts.length && skyState.beacons.length < skyState.maxBeacons; pi += 1) {
+        var post = posts[pi];
+        var pid = String(post.public_id || post.publicId || post.uid || post.id);
+        if (skyState.beaconById[pid]) continue;
+
+        while (spiralIdx < maxSpiral) {
+          if (spiralIdx === 0) S++;
+          else {
+            var O = (2 * S - 1) * (2 * S - 1);
+            if (spiralIdx === O) E--;
+            else {
+              var U = (spiralIdx - O) * z | 0;
+              if (U === 0) w++;
+              else if (U === 1) E++;
+              else if (U === 2) w--;
+              else if (U === 3) {
+                E--;
+                if ((spiralIdx - O + 1) * z === 4) {
+                  S++;
+                  if (S >= 52) break;
+                  z = 0.5 / S;
+                }
+              }
+            }
+          }
+          spiralIdx++;
+
+          var key = w + ":" + E;
+          if (skyState.occupiedCells[key]) continue;
+          var M = w * 10;
+          var _ = E * 10;
+          var A = T(M * 0.1, _ * 0.1);
+          var N = (A + T(M * 0.005, _ * 0.005)) * 0.5;
+          N = 1 - (Math.cos(N * Math.PI) + 1) * 0.5 - A - T(M * 0.03, _ * 0.03);
+          N -= T(M * 0.003 + 2.1, _ * 0.003 + 2.1) * 1.5 + T(M * 0.3 + 1.1, _ * 0.3 + 1.1) + T(M * 0.001 + 1.1, _ * 0.001 + 1.1);
+          N *= 0.5;
+          if (N <= 0.75) continue;
+
+          // Keep >= 42 world units between memory beacons so each blinking light point stands distinctly on its own
+          var candPos = computeBeaconCoords(w, E, T);
+          var spaced = true;
+          for (var ei = 0; ei < skyState.beacons.length; ei += 1) {
+            var eb = skyState.beacons[ei];
+            var dx = candPos.wx - eb.wx;
+            var dz = candPos.wz - eb.wz;
+            if (dx * dx + dz * dz < 42 * 42) {
+              spaced = false;
+              break;
+            }
+          }
+          if (!spaced) continue;
+
+          if (!mapIndex || mapIndex.claim(w, E, post)) {
+            var newBeacon = { id: pid, post: post, w: w, E: E, wx: candPos.wx, wy: candPos.wy, wz: candPos.wz };
+            skyState.beaconById[pid] = newBeacon;
+            skyState.occupiedCells[key] = true;
+            skyState.beacons.push(newBeacon);
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      var verts = skyState.beaconGeo.vertices;
+      for (var bi = 0; bi < skyState.maxBeacons; bi += 1) {
+        if (bi < skyState.beacons.length) {
+          var b = skyState.beacons[bi];
+          verts[bi].set(b.wx, b.wy, b.wz);
+          skyState.beaconActive[bi] = 1.0;
+        } else {
+          verts[bi].set(0, -99999, 0);
+          skyState.beaconActive[bi] = 0.0;
+        }
+      }
+      skyState.beaconGeo.verticesNeedUpdate = true;
+      skyState.beaconMat.attributes.aActive.needsUpdate = true;
+    }
+  }
+
+  function setHoveredBeaconIdx(idx) {
+    if (!skyState || skyState.hoveredBeaconIdx === idx) return;
+    if (skyState.hoveredBeaconIdx >= 0 && skyState.hoveredBeaconIdx < skyState.maxBeacons) {
+      skyState.beaconHover[skyState.hoveredBeaconIdx] = 0.0;
+    }
+    skyState.hoveredBeaconIdx = idx;
+    if (idx >= 0 && idx < skyState.maxBeacons) {
+      skyState.beaconHover[idx] = 1.0;
+    }
+    skyState.beaconMat.attributes.aHover.needsUpdate = true;
+  }
+
+  function pickMemoryBeacon(ndcX, ndcY, camera, projector, Vector3, zoomVal, openMemory) {
+    if (!skyState || !skyState.beacons.length) {
+      setHoveredBeaconIdx(-1);
+      return null;
+    }
     if (!camera || !projector || !Vector3) return null;
     if (!Number.isFinite(ndcX) || !Number.isFinite(ndcY)) return null;
+    if (typeof zoomVal === "number" && zoomVal >= 0.85) {
+      setHoveredBeaconIdx(-1);
+      return null;
+    }
+    if (window.__REVIVAL_MEMORY_SEARCH_VISIBLE__ && window.__REVIVAL_MEMORY_SEARCH_VISIBLE__()) {
+      setHoveredBeaconIdx(-1);
+      return null;
+    }
     if (openMemory && Date.now() - (window.__REVIVAL_LAST_MEMORY_CLOSE__ || 0) < 450) return null;
     var post2d = document.querySelector(".post-2d");
     if (post2d && window.getComputedStyle && window.getComputedStyle(post2d).display !== "none") return null;
     if (document.documentElement.classList.contains("revival-modal-open") || document.documentElement.classList.contains("revival-search-open")) return null;
-
-    var posts = availableMemoryPosts();
-    if (!posts.length) return null;
 
     if (!scratchRay) scratchRay = new Vector3();
     scratchRay.set(ndcX, ndcY, 1);
@@ -3469,119 +3759,59 @@
     var rx = scratchRay.x;
     var ry = scratchRay.y;
     var rz = scratchRay.z;
-    var bestPost = null;
+    var bestIdx = -1;
+    var bestCos = 0.9982;
 
-    // 1. Check Starry Sky dome stars (skip when looking steeply downward)
-    if (skyState && ry > -0.08) {
-      var rotY = skyState.particles.rotation.y;
-      var cosR = Math.cos(-rotY);
-      var sinR = Math.sin(-rotY);
-      var lx = rx * cosR + rz * sinR;
-      var ly = ry;
-      var lz = -rx * sinR + rz * cosR;
-      var dirs = skyState.unitDirs;
-      var hitCos = skyState.hitCos;
-      var count = skyState.totalStars;
-      var bestDot = -1;
-      var bestIdx = -1;
-      for (var i = 0; i < count; i += 1) {
-        var o = i * 3;
-        var dot = lx * dirs[o] + ly * dirs[o + 1] + lz * dirs[o + 2];
-        if (dot > hitCos[i] && dot > bestDot) {
-          bestDot = dot;
-          bestIdx = i;
-        }
-      }
-      if (bestIdx >= 0) {
-        bestPost = posts[bestIdx % posts.length];
+    for (var i = 0; i < skyState.beacons.length; i += 1) {
+      var b = skyState.beacons[i];
+      var px = b.wx - camera.position.x;
+      var py = b.wy - camera.position.y;
+      var pz = b.wz - camera.position.z;
+      var pLen = Math.sqrt(px * px + py * py + pz * pz);
+      if (pLen < 1) continue;
+      var pCos = (px * rx + py * ry + pz * rz) / pLen;
+      if (pCos > bestCos) {
+        bestCos = pCos;
+        bestIdx = i;
       }
     }
 
-    // 2. Check ridged mountain light-dots (only on click/tap, never on mousemove hover)
-    if (openMemory && !bestPost && ry < -0.01) {
-      var runtime = window.__REVIVAL_REQUIREJS__ || window.requirejs;
-      var noiseUtils = runtime && runtime._defined && runtime._defined["utils/noiseUtils"];
-      var snoise2D = noiseUtils && noiseUtils.snoise2D;
-      var t = (-55 - camera.position.y) / ry;
-      if (snoise2D && t > 0 && t < 2400) {
-        var hitX = camera.position.x + rx * t;
-        var hitZ = camera.position.z + rz * t;
-        var baseGx = Math.round(hitX / 10);
-        var baseGz = Math.round(hitZ / 10);
-        var bestDotCos = 0.9991;
-        var bestGx = 0;
-        var bestGz = 0;
-        var foundDot = false;
-
-        for (var dx = -2; dx <= 2; dx += 1) {
-          for (var dz = -2; dz <= 2; dz += 1) {
-            var gx = baseGx + dx;
-            var gz = baseGz + dz;
-            var wx = gx * 10;
-            var wz = gz * 10;
-            var a = snoise2D(wx * 0.1, wz * 0.1);
-            var ratio = (a + snoise2D(wx * 0.005, wz * 0.005)) * 0.5;
-            ratio = 1 - (Math.cos(ratio * 3.14159265) + 1) * 0.5 - a - snoise2D(wx * 0.03, wz * 0.03);
-            ratio -= snoise2D(wx * 0.003 + 2.1, wz * 0.003 + 2.1) * 1.5 + snoise2D(wx * 0.3 + 1.1, wz * 0.3 + 1.1) + snoise2D(wx * 0.001 + 1.1, wz * 0.001 + 1.1);
-            ratio *= 0.5;
-            if (ratio <= 0) continue;
-
-            var r1 = 1 - Math.abs(snoise2D(wx * 0.0014 + 4, wz * 0.0014 + 4));
-            var r2 = 1 - Math.abs(snoise2D(wx * 0.0032 + 17.3, wz * 0.0032 + 17.3));
-            var mountainY = -115 + r1 * r1 * 125 + r2 * r2 * 45;
-            var px = wx + (snoise2D(wx * 0.3, wz * 0.3) - 0.5) * 8 - camera.position.x;
-            var py = mountainY + snoise2D(wx * 200 + 12, wz * 200 + 12) * 10 - camera.position.y;
-            var pz = wz + (snoise2D(wx * 0.4, wz * 0.4) - 0.5) * 8 - camera.position.z;
-            var pLen = Math.sqrt(px * px + py * py + pz * pz);
-            if (!pLen) continue;
-            var pCos = (px * rx + py * ry + pz * rz) / pLen;
-            if (pCos > bestDotCos) {
-              bestDotCos = pCos;
-              bestGx = gx;
-              bestGz = gz;
-              foundDot = true;
-            }
-          }
-        }
-
-        if (foundDot) {
-          var hash = ((bestGx * 73856093) ^ (bestGz * 19349663)) >>> 0;
-          bestPost = posts[hash % posts.length];
-        }
-      }
+    if (!openMemory) {
+      setHoveredBeaconIdx(bestIdx);
     }
 
-    if (bestPost && openMemory) {
+    var hitPost = bestIdx >= 0 ? skyState.beacons[bestIdx].post : null;
+    if (hitPost && openMemory) {
       var rt = window.__REVIVAL_REQUIREJS__ || window.requirejs;
       var ui = rt && rt._defined && rt._defined.uiController;
       if (ui && ui.preShowPost2d && ui.showPost2d) {
-        ui.preShowPost2d(bestPost);
-        ui.showPost2d(bestPost);
+        ui.preShowPost2d(hitPost);
+        ui.showPost2d(hitPost);
       }
     }
-    return bestPost;
+    return hitPost;
   }
 
-  function hoverSkyOrDot(ndcX, ndcY, camera, projector, Vector3) {
+  function hoverMemoryBeacon(ndcX, ndcY, camera, projector, Vector3, zoomVal) {
     var now = Date.now();
     if (
-      now - hoverCache.time < 60 &&
-      Math.abs(ndcX - hoverCache.x) < 0.004 &&
-      Math.abs(ndcY - hoverCache.y) < 0.004
+      now - hoverCache.time < 40 &&
+      Math.abs(ndcX - hoverCache.x) < 0.003 &&
+      Math.abs(ndcY - hoverCache.y) < 0.003
     ) {
       return hoverCache.hit;
     }
     hoverCache.x = ndcX;
     hoverCache.y = ndcY;
     hoverCache.time = now;
-    hoverCache.hit = Boolean(pickSkyOrDot(ndcX, ndcY, camera, projector, Vector3, false));
+    hoverCache.hit = Boolean(pickMemoryBeacon(ndcX, ndcY, camera, projector, Vector3, zoomVal, false));
     return hoverCache.hit;
   }
 
   window.__REVIVAL_INIT_STARRY_SKY__ = initStarrySky;
   window.__REVIVAL_UPDATE_STARRY_SKY__ = updateStarrySky;
-  window.__REVIVAL_PICK_SKY_OR_DOT__ = pickSkyOrDot;
-  window.__REVIVAL_HOVER_SKY_OR_DOT__ = hoverSkyOrDot;
+  window.__REVIVAL_PICK_MEMORY_BEACON__ = pickMemoryBeacon;
+  window.__REVIVAL_HOVER_MEMORY_BEACON__ = hoverMemoryBeacon;
   window.__REVIVAL_TRIGGER_PULSE__ = triggerSpacetimePulse;
   window.__REVIVAL_GAZE_PITCH__ = computeGazePitch;
 })();
