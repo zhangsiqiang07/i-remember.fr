@@ -721,7 +721,7 @@
     patched = patched.replace('function z(e){f.trackPage({trackPage:"memory-view"})', 'function z(e){var revivalDirect=!!window.SONGQI_DIRECT_MEMORY;window.SONGQI_DIRECT_MEMORY=false;window.SongqiMemoryNavigation.opened(e);f.trackPage({trackPage:"memory-view"})');
     patched = patched.replace('d.fromTo(g,1,{opacity:0},{opacity:1,ease:"linear"}),d.to(b,0,{width:0}),d.to(b,.6,{delay:.4,width:348})',
       'd.fromTo(g,revivalDirect?0:1,{opacity:0},{opacity:1,ease:"linear"}),d.to(b,0,{width:0}),d.to(b,revivalDirect?0:.6,{delay:revivalDirect?0:.4,width:348})');
-    patched = patched.replace('function Q(){history.replaceState&&history.replaceState(null,"",t.SITE_URL+"/"),D.dispatch()', 'function Q(){window.SongqiPhotos.closeMemory&&window.SongqiPhotos.closeMemory();window.SongqiMemoryNavigation.closed();history.replaceState&&history.replaceState(null,"",t.SITE_URL+"/"),D.dispatch()');
+    patched = patched.replace('function Q(){history.replaceState&&history.replaceState(null,"",t.SITE_URL+"/"),D.dispatch()', 'function Q(){window.__REVIVAL_LAST_MEMORY_CLOSE__=Date.now();window.SongqiPhotos.closeMemory&&window.SongqiPhotos.closeMemory();window.SongqiMemoryNavigation.closed();history.replaceState&&history.replaceState(null,"",t.SITE_URL+"/"),D.dispatch()');
     patched = patched.replace('e.preShow=U,e.show=z,e.hide=Q,e.updateFading=Y', 'e.preShow=U,e.show=z,e.hide=Q,e.replace=function(t){U(t);O=t;history.replaceState(null,"",window.__REVIVAL_PUBLIC_MEMORY_PATH__(t));b[0].scrollpane.onResize();window.SongqiMemoryNavigation.opened(t)},e.updateFading=Y');
     patched = patched.replace('e.append("fileId",r.data.fileId),', 'e.append("fileId",r.data.fileId),r.data.photos&&r.data.photos.length&&e.append("photos",JSON.stringify(r.data.photos)),');
     // Retain the original noise field, geometry and transitions. Only replace
@@ -743,7 +743,72 @@
       .replace('m.copy(D.position),m.sub(e)', 'D.visible=D.interactive=!0,m.copy(D.position),m.sub(e)')
       .replace('bt&&mt.unshift(bt);', 'bt&&!bt.visible&&(bt.onOut(),bt=null),bt&&mt.unshift(bt);')
       .replace('function N(t){if(e.visible)m=t,g||O();',
-        'function N(t){t=window.__REVIVAL_UNIQUE_MAP_POSTS__(t);if(e.visible)m=t,g||O();');
+        'function N(t){t=window.__REVIVAL_UNIQUE_MAP_POSTS__(t);if(e.visible)m=t,g||O();')
+      // Deep midnight sky clearColor & horizon fog for aerial perspective
+      .replace('st.fog=new b.FogExp2(460551,6e-4)', 'st.fog=new b.FogExp2(395796,5.5e-4)')
+      .replace('ut.setClearColor(460551,1)', 'ut.setClearColor(395796,1)')
+      // Sync navPostParticles Y height with ridged mountain terrain
+      .replace(
+        'D.position.y=T(M*.0013+4,_*.0013+4)*-40+T(M*6e-4+32,_*6e-4+32)*-90+T(M*200+12,_*200+12)*10',
+        'D.position.y=-115+Math.pow(1-Math.abs(T(M*.0014+4,_*.0014+4)),2)*125+Math.pow(1-Math.abs(T(M*.0032+17.3,_*.0032+17.3)),2)*45+T(M*200+12,_*200+12)*10'
+      )
+      // Upgrade particleWave with spacetime pointer resonance & ripple uniforms
+      .replace(
+        'posFieldOffset:{type:"v3",value:new r.Vector3(this.offsetX,0,this.offsetZ)},cameraVector:{type:"v3",value:new r.Vector3(0,0,0)},dpi:{type:"f",value:window.devicePixelRatio||1}}',
+        'posFieldOffset:{type:"v3",value:new r.Vector3(this.offsetX,0,this.offsetZ)},cameraVector:{type:"v3",value:new r.Vector3(0,0,0)},dpi:{type:"f",value:window.devicePixelRatio||1},uPointerWorld:{type:"v3",value:new r.Vector3(0,0,0)},uPulse:{type:"v4",value:new r.Vector4(0,0,10,0)}}'
+      )
+      .replace(
+        'varying float vZoom;',
+        'varying float vZoom;\\nvarying float vMountainElev;\\nvarying float vEnergy;\\nuniform vec3 uPointerWorld;\\nuniform vec4 uPulse;'
+      )
+      .replace(
+        'float offsetY = snoise(refPos.xz * 0.0013 + 4.0) * - 40.00 + snoise(refPos.xz * 0.0006 + 32.0) * - 90.0;',
+        'float r1 = 1.0 - abs(snoise(refPos.xz * 0.0014 + 4.0));\\n    float r2 = 1.0 - abs(snoise(refPos.xz * 0.0032 + 17.3));\\n    float mountainH = r1 * r1 * 125.0 + r2 * r2 * 45.0;\\n    float pDist = length(refPos.xz - uPointerWorld.xy);\\n    float pointerField = (1.0 - smoothstep(0.0, 260.0, pDist)) * uPointerWorld.z;\\n    float pulseWave = 0.0;\\n    if (uPulse.w > 0.001) {\\n      float waveR = uPulse.z * 540.0;\\n      float ringD = abs(length(refPos.xz - uPulse.xy) - waveR);\\n      pulseWave = exp(-ringD * 0.018) * exp(-uPulse.z * 1.45) * uPulse.w;\\n    }\\n    float energy = clamp(pointerField * 0.78 + pulseWave * 1.15, 0.0, 1.0);\\n    float offsetY = -115.0 + mountainH + pointerField * 14.0 + pulseWave * 22.0;'
+      )
+      .replace(
+        'float blinkRatio = step(.1, snoise(refPos.xz)) * snoise(refPos.xz * 1.0 + 30.0 + time * 0.05);\\n\\n    pAlpha = clamp(mix(0.5, .6 + .4 * blinkRatio, fixedPosNoiseRatio) * fading * pow(5., clamp(fixedPosNoiseRatio, 0., 1.)), 0., 1.);\\n\\n    alphaIntensity = 1.0 + abs(snoise(refPos.xz * 400.0) * .8) * (.3 + blinkRatio * .7);\\n\\n    gl_PointSize = mix(500.0, 5000.0, pow(zoom, 2.1))  / distanceToCamera * 6.0 * mix(0.4, 1.0, fixedPosNoiseRatio) * dpi * (.8 + blinkRatio * .3);\\n\\n    vZoom = zoom;',
+        'float elevNorm = clamp(mountainH / 170.0, 0.0, 1.0);\\n    float blinkRatio = 0.5 + 0.5 * snoise(refPos.xz * 1.05 + 30.0 + time * 0.06);\\n\\n    pAlpha = clamp((mix(0.46, .64 + .38 * blinkRatio, fixedPosNoiseRatio) * (0.52 + 0.68 * elevNorm) + energy * 0.48) * fading * pow(5., clamp(fixedPosNoiseRatio, 0., 1.)), 0., 1.);\\n\\n    alphaIntensity = 1.0 + abs(snoise(refPos.xz * 400.0) * .65) * (.25 + blinkRatio * .65);\\n\\n    gl_PointSize = mix(500.0, 4800.0, pow(zoom, 2.1)) / distanceToCamera * 6.0 * mix(0.38, 1.08, clamp(fixedPosNoiseRatio * 0.72 + elevNorm * 0.28, 0., 1.)) * dpi * (.8 + blinkRatio * .28) * (1.0 + energy * 0.42);\\n\\n    vZoom = zoom;\\n    vMountainElev = elevNorm;\\n    vEnergy = energy;'
+      )
+      .replace(
+        'varying float vZoom;\\n// uniform sampler2D tDiffuse;',
+        'varying float vZoom;\\nvarying float vMountainElev;\\nvarying float vEnergy;\\n// uniform sampler2D tDiffuse;'
+      )
+      .replace(
+        'float distanceToCenter = length(gl_PointCoord.xy - .5) * 2.;\\n\\n    gl_FragColor.a = (step(0., distanceToCenter) - step(.25, distanceToCenter)) * 1.;\\n    gl_FragColor.a += (step(.25, distanceToCenter) - step(.27, distanceToCenter)) * mix(1., .4, (distanceToCenter - .25) / (.27 - .25));\\n    gl_FragColor.a += (step(.27, distanceToCenter) - step(.3, distanceToCenter)) * mix(.4, .15, (distanceToCenter - .27) / (.3 - .27));\\n    gl_FragColor.a += (step(.3, distanceToCenter) - step(1., distanceToCenter)) * mix(.15, 0., (distanceToCenter - .3) / (1. - .3));\\n\\n    gl_FragColor.a = pow(abs(gl_FragColor.a), alphaIntensity) * pAlpha * ( 1. - clampNorm(vZoom, .75, 1.) * .4);',
+        'vec2 starUv = (gl_PointCoord.xy - .5) * 2.;\\n    float d2 = dot(starUv, starUv);\\n    if (d2 > 1.) discard;\\n    float inv2 = 1. - d2;\\n    float core = smoothstep(.22, .02, d2);\\n    float halo = inv2 * inv2 * .36;\\n    float shape = clamp(core * .88 + halo, 0., 1.);\\n    vec3 valleyTint = mix(vec3(.55, .68, .92), vec3(.98, .96, .92), vMountainElev);\\n    vec3 baseCol = mix(gl_FragColor.rgb * valleyTint, vec3(.96, .98, 1.), core * (.14 + .22 * vMountainElev));\\n    gl_FragColor.rgb = mix(baseCol, vec3(.78, .90, 1.), vEnergy * .72);\\n    gl_FragColor.a = pow(max(shape, 0.001), alphaIntensity * .85) * pAlpha * ( 1. - clampNorm(vZoom, .75, 1.) * .4);'
+      )
+      .replace(
+        'float distanceToCenter = length(gl_PointCoord.xy - .5) * 2.;\\n\\n    float alpha = (step(0., distanceToCenter) - step(.25, distanceToCenter)) * mix(1., .4, distanceToCenter / .25);\\n    alpha += (step(.25, distanceToCenter) - step(.3, distanceToCenter)) * mix(.4, .15, (distanceToCenter - .25) / (.3 - .25));\\n    alpha += (step(.3, distanceToCenter) - step(1., distanceToCenter)) * mix(.15, 0., (distanceToCenter - .3) / (1. - .3));\\n    alpha = pow(abs(alpha), alphaIntensity) * pAlpha;',
+        'vec2 starUv = (gl_PointCoord.xy - .5) * 2.;\\n    float d2 = dot(starUv, starUv);\\n    if (d2 > 1.) discard;\\n    float distanceToCenter = sqrt(d2);\\n    float inv2 = 1. - d2;\\n    float core = smoothstep(.24, .02, d2);\\n    float alpha = pow(max(clamp(core * .88 + inv2 * inv2 * .36, 0., 1.), 0.001), alphaIntensity * .85) * pAlpha;'
+      )
+      .replace(
+        'if(revivalHit){revivalHit.onClick();return}',
+        'if(revivalHit){revivalHit.onClick();return}if(e.canInteractiveWithPost&&t.target&&t.target.closest&&t.target.closest(".base-3d-container")){window.__REVIVAL_TRIGGER_PULSE__&&window.__REVIVAL_TRIGGER_PULSE__(wt,Et,it,at,b.Vector3,0.95);if(window.__REVIVAL_PICK_SKY_OR_DOT__&&window.__REVIVAL_PICK_SKY_OR_DOT__(wt,Et,it,at,b.Vector3,true)){return}}'
+      )
+      .replace(
+        'e.canInteractiveWithPost&&(t.isDoubleClick||t.isClick&&bt&&(bt.onOut(),bt.onClick(),bt=null))',
+        'e.canInteractiveWithPost&&(t.isDoubleClick||(t.isClick&&(window.__REVIVAL_TRIGGER_PULSE__&&window.__REVIVAL_TRIGGER_PULSE__(wt,Et,it,at,b.Vector3,0.95),bt?(bt.onOut(),bt.onClick(),bt=null):(t.target&&t.target.closest&&t.target.closest(".base-3d-container")&&window.__REVIVAL_PICK_SKY_OR_DOT__&&window.__REVIVAL_PICK_SKY_OR_DOT__(wt,Et,it,at,b.Vector3,true)))))'
+      )
+      .replace(
+        'e.targetZoom=y(e.targetZoom+t*.05,0,1)',
+        'e.targetZoom=y(e.targetZoom+t*.05,0,1);Math.abs(t)>.08&&typeof window!=="undefined"&&window.__REVIVAL_TRIGGER_PULSE__&&window.__REVIVAL_TRIGGER_PULSE__(wt,Et,it,at,b.Vector3,0.55)'
+      )
+      .replace(
+        'bt?H.cursor="pointer":e.hasControl?(H.cursor=K?"grabbing":"grab",H.cursor=K?"-webkit-grabbing":"-webkit-grab"):H.cursor="auto"',
+        '(bt||(e.canInteractiveWithPost&&!K&&window.__REVIVAL_HOVER_SKY_OR_DOT__&&window.__REVIVAL_HOVER_SKY_OR_DOT__(wt,Et,it,at,b.Vector3)))?H.cursor="pointer":e.hasControl?(H.cursor=K?"grabbing":"grab",H.cursor=K?"-webkit-grabbing":"-webkit-grab"):H.cursor="auto"'
+      )
+      .replace(
+        'it.translateY(Math.sin(ct*2)*_/2),it.lookAt(R.position)',
+        'it.translateY(Math.sin(ct*2)*_/2),R.position.y+=(window.__REVIVAL_GAZE_PITCH__?window.__REVIVAL_GAZE_PITCH__(Et,e.hasControl,u):0),it.lookAt(R.position)'
+      )
+      .replace(
+        'st.add(R),l.init(st),a.init(st),f.init(st)',
+        'st.add(R),l.init(st),a.init(st),f.init(st),window.__REVIVAL_INIT_STARRY_SKY__&&window.__REVIVAL_INIT_STARRY_SKY__(st,b)'
+      )
+      .replace(
+        'l.update();var et=a.update(),st=f.update();',
+        'l.update();window.__REVIVAL_UPDATE_STARRY_SKY__&&window.__REVIVAL_UPDATE_STARRY_SKY__(Q,u,lt,it,at,b.Vector3,wt,Et,e.hasControl,bt,mt,K);var et=a.update(),st=f.update();'
+      );
     return patched
       .replace('s=n.SITE_URL+s,', 's=window.__REVIVAL_PUBLIC_SHARE_URL__(s),')
       .replace(
@@ -2590,4 +2655,933 @@
   document.addEventListener("touchmove", function (event) {
     if (matchMedia("(max-width:760px), (max-width:1024px) and (max-height:500px)").matches && event.target.closest(".post-2d-center-wrapper,.revival-menu-card,.add-steps-message")) event.stopPropagation();
   }, { capture: true, passive: true });
+})();
+
+;(function () {
+  var skyState = null;
+  var scratchRay = null;
+  var hoverCache = { x: NaN, y: NaN, time: 0, hit: false };
+
+  function initStarrySky(scene, THREE) {
+    if (!scene || !THREE || skyState) return;
+
+    var reducedMotion = Boolean(
+      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+    var deterministic = Boolean(
+      window.I_REMEMBER_REVIVAL && window.I_REMEMBER_REVIVAL.deterministic
+    );
+
+    // 1. Atmospheric Night Sky Gradient Dome + Analytic Milky Way Glow (0 extra draw calls / overdraw)
+    var domeGeo = new THREE.Geometry();
+    var segW = 16;
+    var segH = 10;
+    var domeR = 2650;
+    for (var iy = 0; iy <= segH; iy += 1) {
+      var v = iy / segH;
+      var phi = v * Math.PI;
+      for (var ix = 0; ix <= segW; ix += 1) {
+        var u = ix / segW;
+        var theta = u * Math.PI * 2;
+        domeGeo.vertices.push(new THREE.Vector3(
+          -domeR * Math.cos(theta) * Math.sin(phi),
+          domeR * Math.cos(phi),
+          domeR * Math.sin(theta) * Math.sin(phi)
+        ));
+      }
+    }
+    var stride = segW + 1;
+    for (var fy = 0; fy < segH; fy += 1) {
+      for (var fx = 0; fx < segW; fx += 1) {
+        var a = fy * stride + fx;
+        var b = a + 1;
+        var c = a + stride;
+        var d = c + 1;
+        if (fy !== 0) domeGeo.faces.push(new THREE.Face3(a, c, b));
+        if (fy !== segH - 1) domeGeo.faces.push(new THREE.Face3(b, c, d));
+      }
+    }
+    var tilt = 0.56;
+    var cosTilt = Math.cos(tilt);
+    var sinTilt = Math.sin(tilt);
+    var domeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uRotY: { type: "f", value: 0 },
+        uOpacity: { type: "f", value: 0.85 }
+      },
+      vertexShader: [
+        "varying vec3 vDir;",
+        "void main() {",
+        "  vDir = normalize(position);",
+        "  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
+        "}"
+      ].join("\n"),
+      fragmentShader: [
+        "precision mediump float;",
+        "uniform float uRotY;",
+        "uniform float uOpacity;",
+        "varying vec3 vDir;",
+        "void main() {",
+        "  vec3 dir = normalize(vDir);",
+        "  float h = clamp(dir.y, -0.15, 1.0);",
+        "  vec3 horizon = vec3(0.0235, 0.0392, 0.0784);",
+        "  vec3 midSky = vec3(0.018, 0.032, 0.070);",
+        "  vec3 zenith = vec3(0.008, 0.015, 0.038);",
+        "  vec3 col = mix(horizon, midSky, smoothstep(-0.02, 0.28, h));",
+        "  col = mix(col, zenith, smoothstep(0.28, 0.85, h));",
+        "  float cR = cos(-uRotY);",
+        "  float sR = sin(-uRotY);",
+        "  vec3 gDir = vec3(dir.x * cR + dir.z * sR, dir.y, -dir.x * sR + dir.z * cR);",
+        "  float galDist = abs(dot(gDir, vec3(0.0, 0.847, -0.531)));",
+        "  float band = exp(-galDist * 7.0);",
+        "  float rift = 0.72 + 0.28 * sin(gDir.x * 6.0 + gDir.z * 4.5) * cos(gDir.y * 5.0 - gDir.x * 3.5);",
+        "  float horizonFade = smoothstep(-0.02, 0.28, h);",
+        "  col += vec3(0.016, 0.026, 0.056) * band * rift * horizonFade * uOpacity;",
+        "  gl_FragColor = vec4(col, 1.0);",
+        "}"
+      ].join("\n"),
+      side: THREE.BackSide,
+      depthWrite: false,
+      depthTest: false,
+      fog: false
+    });
+    var skyDome = new THREE.Mesh(domeGeo, domeMat);
+    skyDome.frustumCulled = false;
+    scene.add(skyDome);
+
+    // 2. Astronomical Power-Law Starfield (960 stars, soft bokeh matched to terrain points)
+    var totalStars = 960;
+    var geometry = new THREE.Geometry();
+    var sizes = [];
+    var phases = [];
+    var colors = [];
+    var flares = [];
+    var starPositions = new Float32Array(totalStars * 3);
+    var unitDirs = new Float32Array(totalStars * 3);
+    var hitCos = new Float32Array(totalStars);
+
+    var faintPalette = [
+      new THREE.Color(0xdce8ff),
+      new THREE.Color(0xf2f6ff),
+      new THREE.Color(0xffffff),
+      new THREE.Color(0xfff1dc)
+    ];
+    var heroPalette = [
+      new THREE.Color(0xb4ceff),
+      new THREE.Color(0xdce8ff),
+      new THREE.Color(0xffffff),
+      new THREE.Color(0xffe9c8)
+    ];
+
+    for (var i = 0; i < totalStars; i += 1) {
+      var x, y, z;
+      var radius = 1750 + Math.random() * 700;
+      var isMilkyWay = i >= 640 && i < 900;
+      var isHero = i >= 900;
+
+      if (isMilkyWay) {
+        var lon = Math.random() * Math.PI * 2;
+        var lat = (Math.random() + Math.random() + Math.random() - 1.5) * 0.2;
+        var gx = Math.cos(lat) * Math.cos(lon);
+        var gy = Math.sin(lat);
+        var gz = Math.cos(lat) * Math.sin(lon);
+        x = gx * radius;
+        y = (gy * cosTilt - gz * sinTilt) * radius;
+        z = (gy * sinTilt + gz * cosTilt) * radius;
+        if (y < -radius * 0.08) y = Math.abs(y) * 0.85;
+      } else {
+        var theta = Math.random() * Math.PI * 2;
+        var u = -0.06 + Math.random() * 1.06;
+        var sinPhi = Math.sqrt(Math.max(0, 1 - u * u));
+        x = radius * sinPhi * Math.cos(theta);
+        y = radius * u;
+        z = radius * sinPhi * Math.sin(theta);
+      }
+
+      geometry.vertices.push(new THREE.Vector3(x, y, z));
+      starPositions[i * 3] = x;
+      starPositions[i * 3 + 1] = y;
+      starPositions[i * 3 + 2] = z;
+      var invLen = 1 / Math.sqrt(x * x + y * y + z * z);
+      unitDirs[i * 3] = x * invLen;
+      unitDirs[i * 3 + 1] = y * invLen;
+      unitDirs[i * 3 + 2] = z * invLen;
+      hitCos[i] = isHero ? 0.9985 : 0.99935;
+
+      var mag = Math.pow(Math.random(), 3.4);
+      var size = isHero
+        ? 5.5 + Math.random() * 5.0
+        : isMilkyWay
+          ? 1.4 + mag * 2.8
+          : 1.6 + mag * 3.2;
+      sizes.push(size);
+      phases.push(Math.random() * Math.PI * 2);
+      colors.push(
+        isHero
+          ? heroPalette[Math.floor(Math.random() * heroPalette.length)]
+          : faintPalette[Math.floor(Math.random() * faintPalette.length)]
+      );
+      flares.push(isHero ? 0.25 + Math.random() * 0.35 : 0.0);
+    }
+
+    var uniforms = {
+      uTime: { type: "f", value: 0 },
+      uDpi: { type: "f", value: window.devicePixelRatio || 1 },
+      uZoom: { type: "f", value: 0 },
+      uOpacity: { type: "f", value: 0.84 },
+      uWarp: { type: "f", value: 0 }
+    };
+
+    var attributes = {
+      aSize: { type: "f", value: sizes },
+      aPhase: { type: "f", value: phases },
+      aColor: { type: "c", value: colors },
+      aFlare: { type: "f", value: flares }
+    };
+
+    var vertexShader = [
+      "attribute float aSize;",
+      "attribute float aPhase;",
+      "attribute vec3 aColor;",
+      "attribute float aFlare;",
+      "uniform float uTime;",
+      "uniform float uDpi;",
+      "uniform float uZoom;",
+      "uniform float uOpacity;",
+      "uniform float uWarp;",
+      "varying vec3 vColor;",
+      "varying float vAlpha;",
+      "varying float vFlare;",
+      "void main() {",
+      "  float elev = clamp(normalize(position).y, -0.1, 1.0);",
+      "  float extinction = smoothstep(-0.02, 0.24, elev);",
+      "  float scintAmp = mix(0.28, 0.10, smoothstep(0.0, 0.7, elev));",
+      "  float speed = 0.45 + fract(aPhase * 3.17) * 0.85;",
+      "  float wave = sin(uTime * speed + aPhase * 11.0) * cos(uTime * 0.42 + aPhase * 5.3);",
+      "  float twinkle = 1.0 - scintAmp * (0.5 - 0.5 * wave);",
+      "  vColor = mix(vec3(0.75, 0.82, 0.96), aColor, smoothstep(0.0, 0.25, elev));",
+      "  vColor = mix(vColor, vec3(0.84, 0.93, 1.0), uWarp * 0.35);",
+      "  vFlare = aFlare * (0.85 + 0.15 * twinkle + uWarp * 0.45);",
+      "  vAlpha = clamp(twinkle * extinction * uOpacity * (1.0 + uWarp * 0.28), 0.0, 1.0);",
+      "  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);",
+      "  gl_PointSize = aSize * uDpi * (0.92 + 0.14 * twinkle) * (1.0 + uZoom * 0.12 + uWarp * 0.35);",
+      "  gl_Position = projectionMatrix * mvPosition;",
+      "}"
+    ].join("\n");
+
+    var fragmentShader = [
+      "precision mediump float;",
+      "varying vec3 vColor;",
+      "varying float vAlpha;",
+      "varying float vFlare;",
+      "void main() {",
+      "  vec2 uv = (gl_PointCoord.xy - 0.5) * 2.0;",
+      "  float d2 = dot(uv, uv);",
+      "  if (d2 > 1.0) discard;",
+      "  float inv2 = 1.0 - d2;",
+      "  float core = smoothstep(0.22, 0.02, d2);",
+      "  float halo = inv2 * inv2 * 0.36;",
+      "  float spikes = 0.0;",
+      "  if (vFlare > 0.02) {",
+      "    float sx = max(0.0, 1.0 - abs(uv.y) * 7.5) * max(0.0, 1.0 - abs(uv.x) * 1.45);",
+      "    float sy = max(0.0, 1.0 - abs(uv.x) * 7.5) * max(0.0, 1.0 - abs(uv.y) * 1.45);",
+      "    spikes = (sx * sx + sy * sy) * vFlare * 0.65;",
+      "  }",
+      "  float intensity = clamp(core * 0.9 + halo + spikes, 0.0, 1.1);",
+      "  vec3 finalColor = mix(vColor, vec3(1.0), core * 0.5);",
+      "  gl_FragColor = vec4(finalColor, intensity * vAlpha);",
+      "}"
+    ].join("\n");
+
+    var material = new THREE.ShaderMaterial({
+      uniforms: uniforms,
+      attributes: attributes,
+      vertexShader: vertexShader,
+      fragmentShader: fragmentShader,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      fog: false
+    });
+
+    var particles = new THREE.ParticleSystem(geometry, material);
+    particles.frustumCulled = false;
+    scene.add(particles);
+
+    // 3. Volumetric 3D Spacetime Drifters (220 tiny world-wrapped particles bridging ground & sky)
+    var driftCount = 220;
+    var driftGeo = new THREE.Geometry();
+    var driftSizes = [];
+    var driftPhases = [];
+    var driftColors = [];
+    var driftPalette = [
+      new THREE.Color(0x8db6ff),
+      new THREE.Color(0xcce0ff),
+      new THREE.Color(0xfff1dc),
+      new THREE.Color(0xffffff)
+    ];
+    for (var di = 0; di < driftCount; di += 1) {
+      driftGeo.vertices.push(new THREE.Vector3(
+        Math.random() * 1600,
+        -60 + Math.random() * 340,
+        Math.random() * 1600
+      ));
+      driftSizes.push(1.8 + Math.random() * 2.6);
+      driftPhases.push(Math.random() * Math.PI * 2);
+      driftColors.push(driftPalette[di % driftPalette.length]);
+    }
+    var driftUniforms = {
+      uTime: { type: "f", value: 0 },
+      uDpi: { type: "f", value: window.devicePixelRatio || 1 },
+      uCamPos: { type: "v3", value: new THREE.Vector3(0, 0, 0) },
+      uWarp: { type: "f", value: 0 },
+      uOpacity: { type: "f", value: 0.72 }
+    };
+    var driftMat = new THREE.ShaderMaterial({
+      uniforms: driftUniforms,
+      attributes: {
+        aSize: { type: "f", value: driftSizes },
+        aPhase: { type: "f", value: driftPhases },
+        aColor: { type: "c", value: driftColors }
+      },
+      vertexShader: [
+        "attribute float aSize;",
+        "attribute float aPhase;",
+        "attribute vec3 aColor;",
+        "uniform float uTime;",
+        "uniform float uDpi;",
+        "uniform vec3 uCamPos;",
+        "uniform float uWarp;",
+        "uniform float uOpacity;",
+        "varying vec3 vColor;",
+        "varying float vAlpha;",
+        "void main() {",
+        "  vec2 relXZ = mod(position.xz - uCamPos.xz + 800.0, 1600.0) - 800.0;",
+        "  float driftY = position.y + sin(uTime * 0.55 + aPhase) * 9.0;",
+        "  vec3 worldPos = vec3(uCamPos.x + relXZ.x, driftY, uCamPos.z + relXZ.y);",
+        "  float distXZ = length(relXZ);",
+        "  float edgeFade = 1.0 - smoothstep(480.0, 800.0, distXZ);",
+        "  vec4 mvPos = modelViewMatrix * vec4(worldPos, 1.0);",
+        "  float dist = max(1.0, length(mvPos.xyz));",
+        "  float nearFade = smoothstep(35.0, 150.0, dist);",
+        "  float pulse = 0.72 + 0.28 * sin(uTime * 1.1 + aPhase * 3.0);",
+        "  vColor = mix(aColor, vec3(0.84, 0.94, 1.0), uWarp * 0.45);",
+        "  vAlpha = clamp(edgeFade * nearFade * pulse * uOpacity * (0.68 + uWarp * 0.55), 0.0, 1.0);",
+        "  gl_PointSize = clamp((aSize * 340.0 / dist) * uDpi * (1.0 + uWarp * 0.4), 1.0, 10.0 * uDpi);",
+        "  gl_Position = projectionMatrix * mvPos;",
+        "}"
+      ].join("\n"),
+      fragmentShader: [
+        "precision mediump float;",
+        "varying vec3 vColor;",
+        "varying float vAlpha;",
+        "void main() {",
+        "  vec2 uv = (gl_PointCoord.xy - 0.5) * 2.0;",
+        "  float d2 = dot(uv, uv);",
+        "  if (d2 > 1.0) discard;",
+        "  float inv2 = 1.0 - d2;",
+        "  float core = smoothstep(0.24, 0.02, d2);",
+        "  float intensity = clamp(core * 0.85 + inv2 * inv2 * 0.35, 0.0, 1.0);",
+        "  gl_FragColor = vec4(mix(vColor, vec3(1.0), core * 0.4), intensity * vAlpha);",
+        "}"
+      ].join("\n"),
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      fog: false
+    });
+    var drifters = new THREE.ParticleSystem(driftGeo, driftMat);
+    drifters.frustumCulled = false;
+    scene.add(drifters);
+
+    // 4. Celestial Astrolabe Coordinate Rings (subtle spacetime sphere lines)
+    var celestialRings = [];
+    var ringGroup = new THREE.Object3D();
+    var ringSpecs = [
+      { rx: 0.48, rz: 0.22, color: 0x6e98e6 },
+      { rx: -0.62, rz: 0.52, color: 0x8bb4ff },
+      { rx: 1.18, rz: -0.35, color: 0x5d84c9 }
+    ];
+    for (var ri = 0; ri < ringSpecs.length; ri += 1) {
+      var rGeo = new THREE.Geometry();
+      var rSegs = 84;
+      var rRad = 2200;
+      for (var rs = 0; rs <= rSegs; rs += 1) {
+        var rAng = (rs / rSegs) * Math.PI * 2;
+        rGeo.vertices.push(new THREE.Vector3(Math.cos(rAng) * rRad, 0, Math.sin(rAng) * rRad));
+      }
+      var rMat = new THREE.LineBasicMaterial({
+        color: ringSpecs[ri].color,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        opacity: 0.032,
+        depthTest: false,
+        fog: false
+      });
+      var rLine = new THREE.Line(rGeo, rMat);
+      rLine.rotation.x = ringSpecs[ri].rx;
+      rLine.rotation.z = ringSpecs[ri].rz;
+      rLine.frustumCulled = false;
+      ringGroup.add(rLine);
+      celestialRings.push({ line: rLine, mat: rMat });
+    }
+    scene.add(ringGroup);
+
+    // 5. Dynamic Cursor Constellation Synapses (pre-allocated LinePieces buffer)
+    var maxConstellationSegs = 28;
+    var cGeo = new THREE.Geometry();
+    for (var ci = 0; ci < maxConstellationSegs * 2; ci += 1) {
+      cGeo.vertices.push(new THREE.Vector3(0, 0, 0));
+      cGeo.colors.push(new THREE.Color(0x000000));
+    }
+    var cMat = new THREE.LineBasicMaterial({
+      vertexColors: THREE.VertexColors,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      opacity: 0.65,
+      depthTest: false,
+      fog: false
+    });
+    var constellationLines = new THREE.Line(cGeo, cMat, THREE.LinePieces);
+    constellationLines.frustumCulled = false;
+    scene.add(constellationLines);
+
+    var meteors = [];
+    if (!reducedMotion && !deterministic) {
+      for (var m = 0; m < 2; m += 1) {
+        var mGeo = new THREE.Geometry();
+        mGeo.vertices.push(new THREE.Vector3(), new THREE.Vector3());
+        mGeo.colors.push(new THREE.Color(0xffffff), new THREE.Color(0x6699ff));
+        var mMat = new THREE.LineBasicMaterial({
+          vertexColors: true,
+          blending: THREE.AdditiveBlending,
+          transparent: true,
+          opacity: 0,
+          depthTest: false,
+          fog: false
+        });
+        var line = new THREE.Line(mGeo, mMat);
+        line.frustumCulled = false;
+        scene.add(line);
+        meteors.push({
+          line: line,
+          geo: mGeo,
+          mat: mMat,
+          active: false,
+          progress: 0,
+          duration: 1.2,
+          cooldown: 2.5 + m * 4.5 + Math.random() * 4.0,
+          start: new THREE.Vector3(),
+          dir: new THREE.Vector3(),
+          length: 220
+        });
+      }
+    }
+
+    skyState = {
+      skyDome: skyDome,
+      domeUniforms: domeMat.uniforms,
+      particles: particles,
+      uniforms: uniforms,
+      drifters: drifters,
+      driftUniforms: driftUniforms,
+      ringGroup: ringGroup,
+      celestialRings: celestialRings,
+      constellationLines: constellationLines,
+      constellationGeo: cGeo,
+      maxConstellationSegs: maxConstellationSegs,
+      constellationNodes: [],
+      meteors: meteors,
+      starPositions: starPositions,
+      unitDirs: unitDirs,
+      hitCos: hitCos,
+      totalStars: totalStars,
+      reducedMotion: reducedMotion,
+      lastTime: Date.now(),
+      prevCamPos: new THREE.Vector3(),
+      hasPrevCam: false,
+      prevZoom: 0,
+      warp: 0,
+      gazePitch: 0,
+      pointerWorld: { x: 0, z: 0, strength: 0 },
+      pulse: { x: 0, z: 0, age: 10, strength: 0 }
+    };
+  }
+
+  function spawnMeteor(meteor, cameraPos) {
+    var theta = Math.random() * Math.PI * 2;
+    var r = 1350 + Math.random() * 450;
+    var y = 380 + Math.random() * 680;
+    meteor.start.set(
+      cameraPos.x + Math.cos(theta) * r,
+      cameraPos.y + y,
+      cameraPos.z + Math.sin(theta) * r
+    );
+    var tangentAngle = theta + (Math.random() > 0.5 ? 1.2 : -1.2);
+    meteor.dir.set(
+      Math.cos(tangentAngle),
+      -0.38 - Math.random() * 0.25,
+      Math.sin(tangentAngle)
+    ).normalize();
+    meteor.length = 160 + Math.random() * 140;
+    meteor.duration = 0.85 + Math.random() * 0.55;
+    meteor.progress = 0;
+    meteor.active = true;
+  }
+
+  function computeGazePitch(ndcY, hasControl, zoom) {
+    if (!skyState || skyState.reducedMotion) return 0;
+    var target = 0;
+    if (
+      hasControl &&
+      Number.isFinite(ndcY) &&
+      !document.documentElement.classList.contains("revival-modal-open") &&
+      !document.documentElement.classList.contains("revival-search-open")
+    ) {
+      var clampedY = Math.max(-1, Math.min(1, ndcY));
+      var zScale = 1 - (typeof zoom === "number" ? zoom : 0) * 0.55;
+      target = clampedY > 0 ? clampedY * 42 * zScale : clampedY * 18 * zScale;
+    }
+    skyState.gazePitch += (target - skyState.gazePitch) * 0.08;
+    return skyState.gazePitch;
+  }
+
+  function triggerSpacetimePulse(ndcX, ndcY, camera, projector, Vector3, strength) {
+    if (!skyState || skyState.reducedMotion) return;
+    var px = skyState.pointerWorld.x;
+    var pz = skyState.pointerWorld.z;
+    if (camera && projector && Vector3 && Number.isFinite(ndcX) && Number.isFinite(ndcY)) {
+      if (!scratchRay) scratchRay = new Vector3();
+      scratchRay.set(ndcX, ndcY, 1);
+      projector.unprojectVector(scratchRay, camera);
+      scratchRay.sub(camera.position).normalize();
+      if (scratchRay.y < -0.02) {
+        var t = Math.max(40, Math.min(1200, (-45 - camera.position.y) / scratchRay.y));
+        px = camera.position.x + scratchRay.x * t;
+        pz = camera.position.z + scratchRay.z * t;
+      } else {
+        px = camera.position.x + scratchRay.x * 380;
+        pz = camera.position.z + scratchRay.z * 380;
+      }
+    }
+    skyState.pulse.x = px;
+    skyState.pulse.z = pz;
+    skyState.pulse.age = 0;
+    skyState.pulse.strength = typeof strength === "number" ? strength : 0.9;
+  }
+
+  function updateConstellations(cameraPos, camera, projector, Vector3, ndcX, ndcY, hasControl, hoveredPost) {
+    if (!skyState || !skyState.constellationLines) return;
+    var cGeo = skyState.constellationGeo;
+    var verts = cGeo.vertices;
+    var cols = cGeo.colors;
+    var maxSegs = skyState.maxConstellationSegs;
+    var segIdx = 0;
+
+    if (
+      !skyState.reducedMotion &&
+      hasControl &&
+      camera &&
+      projector &&
+      Vector3 &&
+      Number.isFinite(ndcX) &&
+      Number.isFinite(ndcY) &&
+      !document.documentElement.classList.contains("revival-modal-open") &&
+      !document.documentElement.classList.contains("revival-search-open")
+    ) {
+      if (!scratchRay) scratchRay = new Vector3();
+      scratchRay.set(ndcX, ndcY, 1);
+      projector.unprojectVector(scratchRay, camera);
+      scratchRay.sub(camera.position).normalize();
+
+      var rotY = skyState.particles.rotation.y;
+      var cosR = Math.cos(-rotY);
+      var sinR = Math.sin(-rotY);
+      var lx = scratchRay.x * cosR + scratchRay.z * sinR;
+      var ly = scratchRay.y;
+      var lz = -scratchRay.x * sinR + scratchRay.z * cosR;
+
+      if (ly > -0.18) {
+        var dirs = skyState.unitDirs;
+        var pos = skyState.starPositions;
+        var count = skyState.totalStars;
+        var nodes = skyState.constellationNodes;
+        nodes.length = 0;
+        var minDot = 0.945;
+
+        // Collect nearest bright/mid stars in cursor cone (max 7)
+        for (var i = 0; i < count; i += 1) {
+          var o = i * 3;
+          if (dirs[o + 1] < 0.01) continue;
+          var dot = lx * dirs[o] + ly * dirs[o + 1] + lz * dirs[o + 2];
+          if (dot > minDot) {
+            var weight = (dot - minDot) / (1 - minDot);
+            if (nodes.length < 7) {
+              nodes.push({ idx: i, dot: dot, weight: weight });
+              if (nodes.length === 7) nodes.sort(function (a, b) { return b.dot - a.dot; });
+            } else if (dot > nodes[6].dot) {
+              nodes[6].idx = i;
+              nodes[6].dot = dot;
+              nodes[6].weight = weight;
+              nodes.sort(function (a, b) { return b.dot - a.dot; });
+            }
+          }
+        }
+
+        // Connect neighboring stars in the cursor constellation
+        for (var a = 0; a < nodes.length && segIdx < maxSegs; a += 1) {
+          var na = nodes[a];
+          var ia = na.idx * 3;
+          for (var b = a + 1; b < nodes.length && segIdx < maxSegs; b += 1) {
+            var nb = nodes[b];
+            var ib = nb.idx * 3;
+            var pairDot = dirs[ia] * dirs[ib] + dirs[ia + 1] * dirs[ib + 1] + dirs[ia + 2] * dirs[ib + 2];
+            if (pairDot < 0.965) continue;
+            var alpha = Math.min(1, Math.min(na.weight, nb.weight) * 1.45) * (0.28 + skyState.warp * 0.25);
+            var v0 = verts[segIdx * 2];
+            var v1 = verts[segIdx * 2 + 1];
+            v0.set(pos[ia], pos[ia + 1], pos[ia + 2]);
+            v1.set(pos[ib], pos[ib + 1], pos[ib + 2]);
+            cols[segIdx * 2].setRGB(0.55 * alpha, 0.76 * alpha, 1.0 * alpha);
+            cols[segIdx * 2 + 1].setRGB(0.75 * alpha, 0.88 * alpha, 1.0 * alpha);
+            segIdx += 1;
+          }
+        }
+
+        // Bridge hovered foreground memory particle toward the nearest sky star
+        if (hoveredPost && hoveredPost.position && nodes.length && segIdx < maxSegs) {
+          var hdx = hoveredPost.position.x - cameraPos.x;
+          var hdy = hoveredPost.position.y - cameraPos.y;
+          var hdz = hoveredPost.position.z - cameraPos.z;
+          var hx = hdx * cosR + hdz * sinR;
+          var hz = -hdx * sinR + hdz * cosR;
+          var topStar = nodes[0].idx * 3;
+          verts[segIdx * 2].set(hx, hdy, hz);
+          verts[segIdx * 2 + 1].set(pos[topStar], pos[topStar + 1], pos[topStar + 2]);
+          cols[segIdx * 2].setRGB(0.65, 0.82, 1.0);
+          cols[segIdx * 2 + 1].setRGB(0.18, 0.30, 0.52);
+          segIdx += 1;
+        }
+      }
+    }
+
+    for (var s = segIdx; s < maxSegs; s += 1) {
+      verts[s * 2].set(0, 0, 0);
+      verts[s * 2 + 1].set(0, 0, 0);
+      cols[s * 2].setRGB(0, 0, 0);
+      cols[s * 2 + 1].setRGB(0, 0, 0);
+    }
+
+    skyState.constellationLines.position.copy(cameraPos);
+    skyState.constellationLines.rotation.y = skyState.particles.rotation.y;
+    cGeo.verticesNeedUpdate = true;
+    cGeo.colorsNeedUpdate = true;
+  }
+
+  function updateStarrySky(cameraPos, zoom, particleFields, camera, projector, Vector3, ndcX, ndcY, hasControl, hoveredPost, rgbShiftPass, isDragging) {
+    if (!skyState || !cameraPos) return;
+
+    var now = Date.now();
+    var dt = Math.min(0.05, Math.max(0.001, (now - skyState.lastTime) / 1000));
+    skyState.lastTime = now;
+
+    var fading = particleFields && particleFields[0] && particleFields[0].uniforms
+      ? particleFields[0].uniforms.fading.value
+      : 1;
+    var zoomVal = typeof zoom === "number" ? zoom : 0;
+
+    // Camera velocity & warp computation
+    var rawSpeed = 0;
+    if (skyState.hasPrevCam) {
+      var dcx = cameraPos.x - skyState.prevCamPos.x;
+      var dcy = cameraPos.y - skyState.prevCamPos.y;
+      var dcz = cameraPos.z - skyState.prevCamPos.z;
+      var camSpeed = Math.sqrt(dcx * dcx + dcy * dcy + dcz * dcz) / dt;
+      var zoomSpeed = Math.abs(zoomVal - skyState.prevZoom) / dt;
+      rawSpeed = Math.min(1, camSpeed / 260 + zoomSpeed * 0.9 + (isDragging ? 0.16 : 0));
+    }
+    skyState.prevCamPos.copy(cameraPos);
+    skyState.prevZoom = zoomVal;
+    skyState.hasPrevCam = true;
+    skyState.warp += (rawSpeed - skyState.warp) * Math.min(1, dt * 8);
+
+    skyState.skyDome.position.copy(cameraPos);
+    skyState.particles.position.copy(cameraPos);
+    skyState.ringGroup.position.copy(cameraPos);
+
+    if (!skyState.reducedMotion) {
+      skyState.uniforms.uTime.value += dt;
+      skyState.driftUniforms.uTime.value = skyState.uniforms.uTime.value;
+      skyState.particles.rotation.y += dt * (0.004 + skyState.warp * 0.012);
+      skyState.domeUniforms.uRotY.value = skyState.particles.rotation.y;
+      skyState.ringGroup.rotation.y = skyState.particles.rotation.y * 1.4;
+    }
+
+    skyState.uniforms.uZoom.value = zoomVal;
+    skyState.uniforms.uWarp.value = skyState.warp;
+    skyState.driftUniforms.uCamPos.value.copy(cameraPos);
+    skyState.driftUniforms.uWarp.value = skyState.warp;
+
+    var targetOpacity = typeof fading === "number" ? Math.max(0.55, Math.min(0.88, fading + 0.1)) : 0.84;
+    skyState.uniforms.uOpacity.value += (targetOpacity - skyState.uniforms.uOpacity.value) * 0.08;
+    skyState.domeUniforms.uOpacity.value = skyState.uniforms.uOpacity.value;
+    skyState.driftUniforms.uOpacity.value = skyState.uniforms.uOpacity.value * 0.85;
+
+    // Pulse progression
+    if (skyState.pulse.age < 3.5) {
+      skyState.pulse.age += dt;
+      if (skyState.pulse.age >= 3.5) skyState.pulse.strength = 0;
+    }
+    var pulseBoost = skyState.pulse.age < 2.2 ? Math.exp(-skyState.pulse.age * 1.6) * 0.065 : 0;
+
+    // Subtle astrolabe ring luminance response
+    var ringOpacity = (0.028 + skyState.warp * 0.085 + pulseBoost) * Math.min(1, fading + 0.15);
+    for (var ri = 0; ri < skyState.celestialRings.length; ri += 1) {
+      skyState.celestialRings[ri].mat.opacity = ringOpacity * (1 - ri * 0.18);
+    }
+
+    // Relativistic RGB chromatic shift on fast travel/zoom
+    if (rgbShiftPass && rgbShiftPass.uniforms && rgbShiftPass.uniforms.amount) {
+      rgbShiftPass.uniforms.amount.value = 0.0004 + skyState.warp * 0.0011;
+    }
+
+    // Pointer-to-terrain gravitational field uniform
+    var pTargetStrength = 0;
+    if (
+      !skyState.reducedMotion &&
+      hasControl &&
+      camera &&
+      projector &&
+      Vector3 &&
+      Number.isFinite(ndcX) &&
+      Number.isFinite(ndcY) &&
+      !document.documentElement.classList.contains("revival-modal-open") &&
+      !document.documentElement.classList.contains("revival-search-open")
+    ) {
+      if (!scratchRay) scratchRay = new Vector3();
+      scratchRay.set(ndcX, ndcY, 1);
+      projector.unprojectVector(scratchRay, camera);
+      scratchRay.sub(camera.position).normalize();
+      if (scratchRay.y < -0.02) {
+        var tHit = Math.max(40, Math.min(1400, (-45 - camera.position.y) / scratchRay.y));
+        var wx = camera.position.x + scratchRay.x * tHit;
+        var wz = camera.position.z + scratchRay.z * tHit;
+        if (skyState.pointerWorld.strength < 0.02) {
+          skyState.pointerWorld.x = wx;
+          skyState.pointerWorld.z = wz;
+        } else {
+          skyState.pointerWorld.x += (wx - skyState.pointerWorld.x) * 0.25;
+          skyState.pointerWorld.z += (wz - skyState.pointerWorld.z) * 0.25;
+        }
+        pTargetStrength = 1;
+      }
+    }
+    skyState.pointerWorld.strength += (pTargetStrength - skyState.pointerWorld.strength) * 0.16;
+
+    if (particleFields && particleFields.length) {
+      for (var pf = 0; pf < particleFields.length; pf += 1) {
+        var uMap = particleFields[pf] && particleFields[pf].uniforms;
+        if (!uMap) continue;
+        if (uMap.uPointerWorld) {
+          uMap.uPointerWorld.value.set(
+            skyState.pointerWorld.x,
+            skyState.pointerWorld.z,
+            skyState.pointerWorld.strength
+          );
+        }
+        if (uMap.uPulse) {
+          uMap.uPulse.value.set(
+            skyState.pulse.x,
+            skyState.pulse.z,
+            skyState.pulse.age,
+            skyState.pulse.strength
+          );
+        }
+      }
+    }
+
+    updateConstellations(cameraPos, camera, projector, Vector3, ndcX, ndcY, hasControl, hoveredPost);
+
+    for (var i = 0; i < skyState.meteors.length; i += 1) {
+      var meteor = skyState.meteors[i];
+      if (!meteor.active) {
+        meteor.cooldown -= dt;
+        if (meteor.cooldown <= 0) {
+          spawnMeteor(meteor, cameraPos);
+        }
+        continue;
+      }
+
+      meteor.progress += dt / meteor.duration;
+      if (meteor.progress >= 1) {
+        meteor.active = false;
+        meteor.mat.opacity = 0;
+        meteor.cooldown = 4.5 + Math.random() * 7.5;
+        continue;
+      }
+
+      var travel = meteor.progress * 720;
+      var tailDist = Math.max(0, travel - meteor.length * Math.sin(meteor.progress * Math.PI));
+      var head = meteor.geo.vertices[0];
+      var tail = meteor.geo.vertices[1];
+      head.set(
+        meteor.start.x + meteor.dir.x * travel,
+        meteor.start.y + meteor.dir.y * travel,
+        meteor.start.z + meteor.dir.z * travel
+      );
+      tail.set(
+        meteor.start.x + meteor.dir.x * tailDist,
+        meteor.start.y + meteor.dir.y * tailDist,
+        meteor.start.z + meteor.dir.z * tailDist
+      );
+      meteor.geo.verticesNeedUpdate = true;
+      meteor.mat.opacity = Math.sin(meteor.progress * Math.PI) * 0.85;
+    }
+  }
+
+  function availableMemoryPosts() {
+    var runtime = window.__REVIVAL_REQUIREJS__ || window.requirejs;
+    var postCtrl = runtime && runtime._defined && runtime._defined.postController;
+    if (!postCtrl || !postCtrl.tagNamedPosts) return [];
+    var posts = postCtrl.tagNamedPosts[""] || [];
+    if (!posts.length && postCtrl.loadMorePosts) postCtrl.loadMorePosts();
+    return posts;
+  }
+
+  function pickSkyOrDot(ndcX, ndcY, camera, projector, Vector3, openMemory) {
+    if (!camera || !projector || !Vector3) return null;
+    if (!Number.isFinite(ndcX) || !Number.isFinite(ndcY)) return null;
+    if (openMemory && Date.now() - (window.__REVIVAL_LAST_MEMORY_CLOSE__ || 0) < 450) return null;
+    var post2d = document.querySelector(".post-2d");
+    if (post2d && window.getComputedStyle && window.getComputedStyle(post2d).display !== "none") return null;
+    if (document.documentElement.classList.contains("revival-modal-open") || document.documentElement.classList.contains("revival-search-open")) return null;
+
+    var posts = availableMemoryPosts();
+    if (!posts.length) return null;
+
+    if (!scratchRay) scratchRay = new Vector3();
+    scratchRay.set(ndcX, ndcY, 1);
+    projector.unprojectVector(scratchRay, camera);
+    scratchRay.sub(camera.position).normalize();
+
+    var rx = scratchRay.x;
+    var ry = scratchRay.y;
+    var rz = scratchRay.z;
+    var bestPost = null;
+
+    // 1. Check Starry Sky dome stars (skip when looking steeply downward)
+    if (skyState && ry > -0.08) {
+      var rotY = skyState.particles.rotation.y;
+      var cosR = Math.cos(-rotY);
+      var sinR = Math.sin(-rotY);
+      var lx = rx * cosR + rz * sinR;
+      var ly = ry;
+      var lz = -rx * sinR + rz * cosR;
+      var dirs = skyState.unitDirs;
+      var hitCos = skyState.hitCos;
+      var count = skyState.totalStars;
+      var bestDot = -1;
+      var bestIdx = -1;
+      for (var i = 0; i < count; i += 1) {
+        var o = i * 3;
+        var dot = lx * dirs[o] + ly * dirs[o + 1] + lz * dirs[o + 2];
+        if (dot > hitCos[i] && dot > bestDot) {
+          bestDot = dot;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx >= 0) {
+        bestPost = posts[bestIdx % posts.length];
+      }
+    }
+
+    // 2. Check ridged mountain light-dots (only on click/tap, never on mousemove hover)
+    if (openMemory && !bestPost && ry < -0.01) {
+      var runtime = window.__REVIVAL_REQUIREJS__ || window.requirejs;
+      var noiseUtils = runtime && runtime._defined && runtime._defined["utils/noiseUtils"];
+      var snoise2D = noiseUtils && noiseUtils.snoise2D;
+      var t = (-55 - camera.position.y) / ry;
+      if (snoise2D && t > 0 && t < 2400) {
+        var hitX = camera.position.x + rx * t;
+        var hitZ = camera.position.z + rz * t;
+        var baseGx = Math.round(hitX / 10);
+        var baseGz = Math.round(hitZ / 10);
+        var bestDotCos = 0.9991;
+        var bestGx = 0;
+        var bestGz = 0;
+        var foundDot = false;
+
+        for (var dx = -2; dx <= 2; dx += 1) {
+          for (var dz = -2; dz <= 2; dz += 1) {
+            var gx = baseGx + dx;
+            var gz = baseGz + dz;
+            var wx = gx * 10;
+            var wz = gz * 10;
+            var a = snoise2D(wx * 0.1, wz * 0.1);
+            var ratio = (a + snoise2D(wx * 0.005, wz * 0.005)) * 0.5;
+            ratio = 1 - (Math.cos(ratio * 3.14159265) + 1) * 0.5 - a - snoise2D(wx * 0.03, wz * 0.03);
+            ratio -= snoise2D(wx * 0.003 + 2.1, wz * 0.003 + 2.1) * 1.5 + snoise2D(wx * 0.3 + 1.1, wz * 0.3 + 1.1) + snoise2D(wx * 0.001 + 1.1, wz * 0.001 + 1.1);
+            ratio *= 0.5;
+            if (ratio <= 0) continue;
+
+            var r1 = 1 - Math.abs(snoise2D(wx * 0.0014 + 4, wz * 0.0014 + 4));
+            var r2 = 1 - Math.abs(snoise2D(wx * 0.0032 + 17.3, wz * 0.0032 + 17.3));
+            var mountainY = -115 + r1 * r1 * 125 + r2 * r2 * 45;
+            var px = wx + (snoise2D(wx * 0.3, wz * 0.3) - 0.5) * 8 - camera.position.x;
+            var py = mountainY + snoise2D(wx * 200 + 12, wz * 200 + 12) * 10 - camera.position.y;
+            var pz = wz + (snoise2D(wx * 0.4, wz * 0.4) - 0.5) * 8 - camera.position.z;
+            var pLen = Math.sqrt(px * px + py * py + pz * pz);
+            if (!pLen) continue;
+            var pCos = (px * rx + py * ry + pz * rz) / pLen;
+            if (pCos > bestDotCos) {
+              bestDotCos = pCos;
+              bestGx = gx;
+              bestGz = gz;
+              foundDot = true;
+            }
+          }
+        }
+
+        if (foundDot) {
+          var hash = ((bestGx * 73856093) ^ (bestGz * 19349663)) >>> 0;
+          bestPost = posts[hash % posts.length];
+        }
+      }
+    }
+
+    if (bestPost && openMemory) {
+      var rt = window.__REVIVAL_REQUIREJS__ || window.requirejs;
+      var ui = rt && rt._defined && rt._defined.uiController;
+      if (ui && ui.preShowPost2d && ui.showPost2d) {
+        ui.preShowPost2d(bestPost);
+        ui.showPost2d(bestPost);
+      }
+    }
+    return bestPost;
+  }
+
+  function hoverSkyOrDot(ndcX, ndcY, camera, projector, Vector3) {
+    var now = Date.now();
+    if (
+      now - hoverCache.time < 60 &&
+      Math.abs(ndcX - hoverCache.x) < 0.004 &&
+      Math.abs(ndcY - hoverCache.y) < 0.004
+    ) {
+      return hoverCache.hit;
+    }
+    hoverCache.x = ndcX;
+    hoverCache.y = ndcY;
+    hoverCache.time = now;
+    hoverCache.hit = Boolean(pickSkyOrDot(ndcX, ndcY, camera, projector, Vector3, false));
+    return hoverCache.hit;
+  }
+
+  window.__REVIVAL_INIT_STARRY_SKY__ = initStarrySky;
+  window.__REVIVAL_UPDATE_STARRY_SKY__ = updateStarrySky;
+  window.__REVIVAL_PICK_SKY_OR_DOT__ = pickSkyOrDot;
+  window.__REVIVAL_HOVER_SKY_OR_DOT__ = hoverSkyOrDot;
+  window.__REVIVAL_TRIGGER_PULSE__ = triggerSpacetimePulse;
+  window.__REVIVAL_GAZE_PITCH__ = computeGazePitch;
 })();
