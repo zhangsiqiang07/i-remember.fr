@@ -97,7 +97,7 @@ jobs:
           fi
           install -d -m 700 "$RUNNER_TEMP/remember-ssh"
           key="$RUNNER_TEMP/remember-ssh/key"
-          archive="$RUNNER_TEMP/remember-ssh/image.tar.gz"
+          archive="$RUNNER_TEMP/remember-ssh/image.tar"
           manifest="$RUNNER_TEMP/remember-ssh/manifest.json"
           trap 'rm -f "$key" "$archive" "$manifest"' EXIT
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$key"
@@ -106,7 +106,7 @@ jobs:
           printf '%s\n' '43.138.80.38 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGru5PSdwDuNoRfFf7a9/cIaDkPfGaEyy4xiEEWDeiBN' > "$RUNNER_TEMP/remember-ssh/known_hosts"
           image_ref="$DOCKERHUB_IMAGE@$IMAGE_DIGEST"
           image_id=$(docker image inspect --format '{{.Id}}' "$image_ref")
-          docker save "$image_id" | gzip -1 > "$archive"
+          docker save "$image_id" > "$archive"
           docker buildx imagetools inspect --raw "$image_ref" > "$manifest"
           manifest_b64=$(python3 - "$manifest" "$IMAGE_DIGEST" "$image_id" <<'PYTHON'
           import base64, hashlib, json, sys
@@ -120,21 +120,24 @@ jobs:
           )
           checksum=$(sha256sum "$archive" | cut -d' ' -f1)
           size=$(stat -c %s "$archive")
+          export RSYNC_RSH="ssh -T -i $key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o UserKnownHostsFile=$RUNNER_TEMP/remember-ssh/known_hosts"
           for attempt in 1 2 3; do
-            if { printf 'image-archive-v1 %s %s %s %s\n' "$image_id" "$checksum" "$size" "$manifest_b64"; cat "$archive"; } | \
-              ssh -T -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
-                -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
-                -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
-                -o "UserKnownHostsFile=$RUNNER_TEMP/remember-ssh/known_hosts" \
-                "root@$DEPLOY_HOST" "deploy $GITHUB_SHA $IMAGE_DIGEST"; then
+            if rsync --partial --checksum --compress --no-whole-file --protocol=31 --timeout=180 --stats \
+              --rsync-path="upload $GITHUB_SHA $IMAGE_DIGEST" "$archive" "root@$DEPLOY_HOST:image.tar"; then
               break
             else
               result=$?
-              # Retry SSH transport failures only; application/check failures stay fatal.
-              if [[ "$result" != 255 || "$attempt" == 3 ]]; then exit "$result"; fi
+              # Resume interrupted transfers only; image/app verification failures stay fatal.
+              if [[ ! "$result" =~ ^(10|12|30|35|255)$ || "$attempt" == 3 ]]; then exit "$result"; fi
               sleep "$((attempt * 10))"
             fi
           done
+          printf 'cached-image-v1 %s %s %s %s\n' "$image_id" "$checksum" "$size" "$manifest_b64" | \
+            ssh -T -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+              -o "UserKnownHostsFile=$RUNNER_TEMP/remember-ssh/known_hosts" \
+              "root@$DEPLOY_HOST" "deploy $GITHUB_SHA $IMAGE_DIGEST"
           echo "deployed=true" >> "$GITHUB_OUTPUT"
 
       - name: Verify public HTTPS

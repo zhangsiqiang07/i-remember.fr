@@ -3,13 +3,43 @@
 set -euo pipefail
 umask 077
 base=/opt/i-remember
-read -r operation revision digest extra <<< "${SSH_ORIGINAL_COMMAND:-}"
-if [[ "$operation" != deploy || ! "$revision" =~ ^[a-f0-9]{40}$ || ! "$digest" =~ ^sha256:[a-f0-9]{64}$ || -n "$extra" ]]; then
-  echo 'Expected: deploy <40-character commit> <sha256:registry-digest>' >&2
+read -ra command <<< "${SSH_ORIGINAL_COMMAND:-}"
+operation=${command[0]:-}
+revision=${command[1]:-}
+digest=${command[2]:-}
+if [[ ! "$revision" =~ ^[a-f0-9]{40}$ || ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+  echo 'Expected a commit and registry digest' >&2
+  exit 64
+fi
+cache="$base/.image-transfer/image.tar"
+if [[ "$operation" == upload ]]; then
+  # Only the single fixed image cache can be received; no arbitrary rsync paths/options.
+  [[ ${#command[@]} -ge 7 && ${#command[@]} -le 10 ]]
+  [[ ${command[3]} == --server && ${command[-2]} == . && ${command[-1]} == image.tar ]]
+  for argument in "${command[@]:4:${#command[@]}-6}"; do
+    case "$argument" in
+      --partial|--protocol=31|--timeout=180|--stats) ;;
+      -cze.*) [[ "$argument" =~ ^-cze\.[iLsfxCIvu]+$ ]] ;;
+      *) echo 'Unexpected rsync option' >&2; exit 64 ;;
+    esac
+  done
+elif [[ "$operation" != deploy || ${#command[@]} != 3 ]]; then
+  echo 'Expected: deploy <commit> <registry-digest>' >&2
   exit 64
 fi
 exec 9>"$base/deploy.lock"
 flock -w 900 9 || { echo 'Another deployment is still running' >&2; exit 75; }
+if [[ "$operation" == upload ]]; then
+  install -d -m 700 "$base/.image-transfer"
+  [[ ! -L "$cache" && ! -d "$cache" ]]
+  if [[ ! -f "$cache" ]]; then
+    # Seed rsync from the running image so the first release also sends only changes.
+    docker save "$(cat "$base/image-id")" > "$cache.seed"
+    mv "$cache.seed" "$cache"
+  fi
+  rsync "${command[@]:3:${#command[@]}-4}" "$cache"
+  exit 0
+fi
 registry_auth=""
 archive=""
 old_container=""
@@ -37,12 +67,17 @@ trap 'exit 143' TERM
 # Read a bounded protocol header; the remaining stdin is the image archive.
 IFS= read -r -n 65536 transport_header
 [[ ${#transport_header} -lt 65536 ]] || { echo 'Oversized transport header' >&2; exit 64; }
-if [[ "$transport_header" == image-archive-v1\ * ]]; then
+if [[ "$transport_header" == image-archive-v1\ * || "$transport_header" == cached-image-v1\ * ]]; then
   read -r protocol image_id archive_sha archive_size archive_manifest extra <<< "$transport_header"
   [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ && "$archive_sha" =~ ^[a-f0-9]{64}$ && "$archive_size" =~ ^[0-9]{1,10}$ && -z "$extra" ]]
   archive=$(mktemp "$base/.image-archive.XXXXXX")
-  python3 "$base/receive-image.py" "$revision" "$digest" "$image_id" "$archive_sha" "$archive_size" "$archive_manifest" "$archive"
-  gzip -dc "$archive" | docker load
+  if [[ "$protocol" == cached-image-v1 ]]; then
+    [[ -f "$cache" && ! -L "$cache" ]]
+    python3 "$base/receive-image.py" "$revision" "$digest" "$image_id" "$archive_sha" "$archive_size" "$archive_manifest" "$archive" < "$cache"
+  else
+    python3 "$base/receive-image.py" "$revision" "$digest" "$image_id" "$archive_sha" "$archive_size" "$archive_manifest" "$archive"
+  fi
+  docker load --input "$archive"
   image=$(docker image inspect --format '{{.Id}}' "$image_id")
   rm -f -- "$archive"
   archive=""

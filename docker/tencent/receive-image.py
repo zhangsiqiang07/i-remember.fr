@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 import sys
 import tarfile
 
-MAX_ARCHIVE = 1024 * 1024 * 1024
+MAX_ARCHIVE = 2 * 1024 * 1024 * 1024
 SOURCE = "https://github.com/zhangsiqiang07/i-remember.fr"
 
 
@@ -36,7 +36,7 @@ def receive(stream, path, revision, digest, image_id, archive_sha, size, encoded
         raise ValueError("Unexpected data after image archive")
     if checksum.hexdigest() != archive_sha:
         raise ValueError("Image archive checksum mismatch")
-    with tarfile.open(path, "r:gz") as archive:
+    with tarfile.open(path, "r:*") as archive:
         members = {}
         total = 0
         for member in archive:

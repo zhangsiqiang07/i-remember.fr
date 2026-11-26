@@ -39,6 +39,7 @@ jobs:
           bash -n docker/ci-smoke.sh
           bash -n docker/tencent/deploy-from-actions.sh
           python3 docker/tencent/check-receive-image.py
+          python3 docker/tencent/check-rsync-transfer.py
           TAG=sha-000000000000 docker compose config --quiet
 
       - name: Install dependencies

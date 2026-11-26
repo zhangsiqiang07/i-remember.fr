@@ -229,7 +229,7 @@ reverse proxy; URL-encoded public submissions include encoding overhead.
 
 The `Deploy Tencent` workflow automatically builds `main` pushes on GitHub's
 AMD64 runner and pushes one image to GitHub Container Registry. A restricted
-SSH command streams the verified compressed image to `remember.aflyblue.cn`,
+SSH command transfers the verified image incrementally to `remember.aflyblue.cn`,
 avoiding slow registry downloads on the server. It does not build on the 2 GB server and does
 not require DockerHub credentials. Manual dispatch is also limited to `main`.
 A superseded queued commit is skipped before transfer.
@@ -245,16 +245,19 @@ ordinary application code and Dockerfile changes deploy automatically.
 The only Actions secret is `TENCENT_DEPLOY_SSH_KEY`, an Ed25519 private key
 created exclusively for this repository. Its server-side authorized key has a
 forced command, `restrict`, and no PTY, forwarding, agent forwarding, or arbitrary
-shell access. It accepts only a commit SHA and a GHCR image digest. The workflow pins the server's existing Ed25519 host key. Database
+shell access. It accepts only deployment and fixed-file upload commands carrying a commit SHA
+and a GHCR image digest. The workflow pins the server's existing Ed25519 host key. Database
 credentials, the authentication secret, and administrator passwords stay on the
 server and are never sent to Actions or committed. The workflow grants its
 job-scoped `GITHUB_TOKEN` package-write permission for GHCR publishing; the
-token stays on the runner. The runner exports the immutable image and sends its
-archive, checksum and original registry manifest through SSH. The server verifies
+token stays on the runner. The runner exports the immutable image and uses the existing rsync over SSH to
+update one fixed root-only cache file, seeded from the running image on first use.
+Only changed blocks cross the slow international link; interrupted transfers
+resume. The runner then sends the checksum and original registry manifest. The server verifies
 the registry manifest digest, image configuration digest, archive checksum,
-architecture and project labels before loading it. Transfers are bounded to 1 GiB
-compressed, temporary archives are removed on success/failure, and SSH transport
-failures alone receive bounded retries. No personal access token or permanent
+architecture and project labels before loading it. Transfers are bounded to 2 GiB, temporary verification archives are removed on success/failure,
+and transport failures alone receive bounded retries. The single uncompressed
+cache remains at `/opt/i-remember/.image-transfer/image.tar` for subsequent releases. No personal access token or permanent
 registry login is installed. Already queued legacy jobs retain temporary-token
 pull support until they finish.
 
