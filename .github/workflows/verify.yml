@@ -37,6 +37,8 @@ jobs:
           sh -n docker/backup.sh
           sh -n docker/restore.sh
           bash -n docker/ci-smoke.sh
+          bash -n docker/tencent/deploy-from-actions.sh
+          python3 docker/tencent/check-receive-image.py
           TAG=sha-000000000000 docker compose config --quiet
 
       - name: Install dependencies

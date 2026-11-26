@@ -10,7 +10,8 @@ if [[ "$operation" != deploy || ! "$revision" =~ ^[a-f0-9]{40}$ || ! "$digest" =
 fi
 exec 9>"$base/deploy.lock"
 flock -w 900 9 || { echo 'Another deployment is still running' >&2; exit 75; }
-registry_auth=$(mktemp -d "$base/.registry-auth.XXXXXX")
+registry_auth=""
+archive=""
 old_container=""
 old_image=""
 committed=0
@@ -18,7 +19,8 @@ replaced=0
 cleanup() {
   result=$?
   trap - EXIT INT TERM
-  rm -rf -- "$registry_auth"
+  [[ -z "$registry_auth" ]] || rm -rf -- "$registry_auth"
+  [[ -z "$archive" ]] || rm -f -- "$archive"
   if [[ "$replaced" == 1 && "$committed" != 1 ]]; then
     echo 'Candidate failed; restoring the previous application container' >&2
     docker rm -f i-remember >/dev/null 2>&1 || true
@@ -32,13 +34,28 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-# The job-scoped GitHub token is read only from stdin into a temporary Docker
-# config. It is never placed in argv, logs, the app environment or persisted.
-image_ref="ghcr.io/zhangsiqiang07/i-remember.fr@$digest"
-docker --config "$registry_auth" login ghcr.io --username zhangsiqiang07 --password-stdin
-timeout 1200 docker --config "$registry_auth" pull "$image_ref"
-image=$(docker image inspect --format '{{.Id}}' "$image_ref")
-rm -rf -- "$registry_auth"
+# Read a bounded protocol header; the remaining stdin is the image archive.
+IFS= read -r -n 65536 transport_header
+[[ ${#transport_header} -lt 65536 ]] || { echo 'Oversized transport header' >&2; exit 64; }
+if [[ "$transport_header" == image-archive-v1\ * ]]; then
+  read -r protocol image_id archive_sha archive_size archive_manifest extra <<< "$transport_header"
+  [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ && "$archive_sha" =~ ^[a-f0-9]{64}$ && "$archive_size" =~ ^[0-9]{1,10}$ && -z "$extra" ]]
+  archive=$(mktemp "$base/.image-archive.XXXXXX")
+  python3 "$base/receive-image.py" "$revision" "$digest" "$image_id" "$archive_sha" "$archive_size" "$archive_manifest" "$archive"
+  gzip -dc "$archive" | docker load
+  image=$(docker image inspect --format '{{.Id}}' "$image_id")
+  rm -f -- "$archive"
+  archive=""
+else
+  # Compatibility for already queued jobs: ephemeral registry credentials only.
+  registry_auth=$(mktemp -d "$base/.registry-auth.XXXXXX")
+  image_ref="ghcr.io/zhangsiqiang07/i-remember.fr@$digest"
+  printf '%s\n' "$transport_header" | docker --config "$registry_auth" login ghcr.io --username zhangsiqiang07 --password-stdin
+  timeout 1200 docker --config "$registry_auth" pull "$image_ref"
+  image=$(docker image inspect --format '{{.Id}}' "$image_ref")
+  rm -rf -- "$registry_auth"
+  registry_auth=""
+fi
 [[ $(docker image inspect --format '{{.Architecture}}' "$image") == amd64 ]]
 [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image") == "$revision" ]]
 [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.source"}}' "$image") == https://github.com/zhangsiqiang07/i-remember.fr ]]

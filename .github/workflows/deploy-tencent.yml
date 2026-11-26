@@ -81,7 +81,6 @@ jobs:
         id: deploy
         env:
           DEPLOY_SSH_KEY: ${{ secrets.TENCENT_DEPLOY_SSH_KEY }}
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
@@ -98,16 +97,44 @@ jobs:
           fi
           install -d -m 700 "$RUNNER_TEMP/remember-ssh"
           key="$RUNNER_TEMP/remember-ssh/key"
-          trap 'rm -f "$key"' EXIT
+          archive="$RUNNER_TEMP/remember-ssh/image.tar.gz"
+          manifest="$RUNNER_TEMP/remember-ssh/manifest.json"
+          trap 'rm -f "$key" "$archive" "$manifest"' EXIT
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$key"
           chmod 600 "$key"
           # Pin the host key read from the server over the existing trusted SSH connection.
           printf '%s\n' '43.138.80.38 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGru5PSdwDuNoRfFf7a9/cIaDkPfGaEyy4xiEEWDeiBN' > "$RUNNER_TEMP/remember-ssh/known_hosts"
-          printf '%s\n' "$REGISTRY_TOKEN" | ssh -T -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
-            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
-            -o "UserKnownHostsFile=$RUNNER_TEMP/remember-ssh/known_hosts" \
-            "root@$DEPLOY_HOST" "deploy $GITHUB_SHA $IMAGE_DIGEST"
+          image_ref="$DOCKERHUB_IMAGE@$IMAGE_DIGEST"
+          image_id=$(docker image inspect --format '{{.Id}}' "$image_ref")
+          docker save "$image_id" | gzip -1 > "$archive"
+          docker buildx imagetools inspect --raw "$image_ref" > "$manifest"
+          manifest_b64=$(python3 - "$manifest" "$IMAGE_DIGEST" "$image_id" <<'PYTHON'
+          import base64, hashlib, json, sys
+          raw = open(sys.argv[1], 'rb').read()
+          if 'sha256:' + hashlib.sha256(raw).hexdigest() != sys.argv[2]:
+              raw = raw.rstrip(b'\n')
+          assert 'sha256:' + hashlib.sha256(raw).hexdigest() == sys.argv[2], 'Registry digest mismatch'
+          assert json.loads(raw)['config']['digest'] == sys.argv[3], 'Registry image ID mismatch'
+          print(base64.b64encode(raw).decode())
+          PYTHON
+          )
+          checksum=$(sha256sum "$archive" | cut -d' ' -f1)
+          size=$(stat -c %s "$archive")
+          for attempt in 1 2 3; do
+            if { printf 'image-archive-v1 %s %s %s %s\n' "$image_id" "$checksum" "$size" "$manifest_b64"; cat "$archive"; } | \
+              ssh -T -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
+                -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
+                -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+                -o "UserKnownHostsFile=$RUNNER_TEMP/remember-ssh/known_hosts" \
+                "root@$DEPLOY_HOST" "deploy $GITHUB_SHA $IMAGE_DIGEST"; then
+              break
+            else
+              result=$?
+              # Retry SSH transport failures only; application/check failures stay fatal.
+              if [[ "$result" != 255 || "$attempt" == 3 ]]; then exit "$result"; fi
+              sleep "$((attempt * 10))"
+            fi
+          done
           echo "deployed=true" >> "$GITHUB_OUTPUT"
 
       - name: Verify public HTTPS

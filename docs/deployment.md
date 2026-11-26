@@ -229,7 +229,8 @@ reverse proxy; URL-encoded public submissions include encoding overhead.
 
 The `Deploy Tencent` workflow automatically builds `main` pushes on GitHub's
 AMD64 runner and pushes one image to GitHub Container Registry. A restricted
-SSH command tells `remember.aflyblue.cn` to pull the immutable image digest. It does not build on the 2 GB server and does
+SSH command streams the verified compressed image to `remember.aflyblue.cn`,
+avoiding slow registry downloads on the server. It does not build on the 2 GB server and does
 not require DockerHub credentials. Manual dispatch is also limited to `main`.
 A superseded queued commit is skipped before transfer.
 
@@ -248,14 +249,19 @@ shell access. It accepts only a commit SHA and a GHCR image digest. The workflow
 credentials, the authentication secret, and administrator passwords stay on the
 server and are never sent to Actions or committed. The workflow grants its
 job-scoped `GITHUB_TOKEN` package-write permission for GHCR publishing; the
-server uses that same short-lived token via SSH stdin and a temporary Docker
-config only for pulling the image. That config is removed after the pull or on
-failure. No personal access token or permanent registry login is installed.
+token stays on the runner. The runner exports the immutable image and sends its
+archive, checksum and original registry manifest through SSH. The server verifies
+the registry manifest digest, image configuration digest, archive checksum,
+architecture and project labels before loading it. Transfers are bounded to 1 GiB
+compressed, temporary archives are removed on success/failure, and SSH transport
+failures alone receive bounded retries. No personal access token or permanent
+registry login is installed. Already queued legacy jobs retain temporary-token
+pull support until they finish.
 
 The host deployment script:
 
-1. Serializes deployments, pulls an immutable GHCR digest, and checks AMD64
-   architecture plus source/revision image labels.
+1. Serializes deployments, receives and validates one project image through
+   `receive-image.py`, and checks AMD64 architecture plus source/revision labels.
 2. Calls the existing `/opt/i-remember/backup.sh` before running migrations.
 3. Retains the old stopped container, starts the new image with the existing
    external-database settings, and waits for application/Docker health and HTTPS.

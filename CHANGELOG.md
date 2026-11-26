@@ -333,3 +333,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Align the admin-shell integration check with the configurable admin brand and neutral static title.
 - Share full source verification across workflows and require it before Tencent image publishing/deployment; report lint, types, build and test failures separately.
 - Pin the Prisma configuration dependency effect to 3.22.1 to resolve GHSA-7589-6fvf-x4pw while preserving the production audit gate.
+- Transfer the digest-verified Tencent image through restricted SSH instead of relying on slow server-side GHCR downloads; validate archive bounds, integrity and project identity before loading.
