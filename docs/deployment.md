@@ -276,8 +276,7 @@ ssh fly-tencent 'docker logs --tail 100 i-remember'
 The original `Docker` workflow remains the repository's optional DockerHub
 verification/publishing pipeline. Its DockerHub publish job runs only when the repository variable
 `ENABLE_DOCKERHUB_PUBLISH=true` is set, and requires `DOCKERHUB_TOKEN`. Source
-verification still runs normally; Tencent deployment does not depend on the
-optional DockerHub publisher.
+verification is shared through `.github/workflows/verify.yml`. Both workflows run the same lint, typecheck, build, complete tests and production dependency audit. The Tencent image build/deployment job requires this verification to succeed first; it does not depend on the optional DockerHub publisher. Check failures appear as separate named steps, and failed tests remain failures rather than being retried or ignored.
 Backups remain under `/opt/i-remember/backups` and need disk-space monitoring and
 an operator-selected retention/off-host backup policy.
 

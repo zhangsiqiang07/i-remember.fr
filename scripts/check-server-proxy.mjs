@@ -378,7 +378,11 @@ try {
     `${baseUrl}/admin/memory/editor?id=${encodeURIComponent(v1PublicId)}`,
   );
   assert.equal(memoryEditorResponse.status, 200);
-  assert.match(await memoryEditorResponse.text(), /<title>songqi\.org — Admin<\/title>/);
+  const memoryEditorHtml = await memoryEditorResponse.text();
+  // The static shell is neutral; the client applies configured adminName/ownerName.
+  assert.match(memoryEditorHtml, /<title>Admin<\/title>/);
+  assert.match(memoryEditorHtml, /name="apple-mobile-web-app-title" content="Admin"/);
+  assert.doesNotMatch(memoryEditorHtml, /songqi\.org — Admin/);
 
   const removedAdminResponse = await fetch(`${baseUrl}/api/admin/setup`, {
     method: "POST",

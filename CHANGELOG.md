@@ -328,3 +328,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use configured ownerName in admin sign-in/setup, desktop/mobile owner identity, initials and new-memory author defaults; remove personal-name runtime fallbacks. Existing author records and explicitly configured homepage titles are preserved.
 
 - Add independent Admin name configuration for admin branding and browser titles, with Owner name fallback.
+
+### CI verification repairs (2026-11-26)
+- Align the admin-shell integration check with the configurable admin brand and neutral static title.
+- Share full source verification across workflows and require it before Tencent image publishing/deployment; report lint, types, build and test failures separately.

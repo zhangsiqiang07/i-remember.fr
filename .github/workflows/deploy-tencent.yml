@@ -19,7 +19,13 @@ env:
   DEPLOY_HOST: 43.138.80.38
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+    permissions:
+      contents: read
+
   deploy:
+    needs: verify
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
